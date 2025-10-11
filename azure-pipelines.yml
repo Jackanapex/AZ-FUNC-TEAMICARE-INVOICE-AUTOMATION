@@ -1,0 +1,357 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+
+trigger:
+  branches:
+    include:
+    - stg
+    - prd
+  paths:
+    include:
+    - '*'
+
+pr:
+  branches:
+    include:
+      - refs/heads/release/*
+      - refs/heads/feature/*
+      - refs/heads/fix/*
+      - refs/heads/pipeline/*
+      - refs/heads/dev
+
+variables:
+- group: variables_pipeline_app_api_data_ingestion
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+- stage: test_stage
+  displayName: test the functions
+  condition: and(not(or(failed(), canceled())),
+    or(startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/feature/'),
+    startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/pipeline/'),
+    startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/release/'),
+    startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/fix/'),
+    eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/dev')))
+  jobs:
+  
+  - job: test_job_dev
+    displayName: 'Dry-run the functions against dev endpoints'
+    condition: not(
+      or(startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/release/'), 
+        and(startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/fix/'), 
+          eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/prd'))))
+    strategy:
+      matrix:
+        Python3x:
+          python.version: '3.11'
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(python.version)'
+        addToPath: true
+      displayName: 'Use Python $(python.version)'
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --upgrade
+      displayName: 'Install dependencies'
+
+    - script: |
+        pip install pytest pytest-azurepipelines
+        pytest
+      displayName: 'pytest'
+      env:
+        is_local_dev: false
+        AzureWebJobsStorage: $(AzureWebJobsStorage)
+        FUNCTIONS_WORKER_RUNTIME: $(FUNCTIONS_WORKER_RUNTIME)
+        AzureWebJobsFeatureFlags: $(AzureWebJobsFeatureFlags)
+        livehire_client_id: $(livehire_client_id)
+        livehire_client_secret: $(livehire_client_secret)
+        livehire_authentication_url: $(livehire_authentication_url)
+        livehire_endpoint_analytics_activities: $(livehire_endpoint_analytics_activities)
+        livehire_endpoint_analytics_job_vacancies: $(livehire_endpoint_analytics_job_vacancies)
+        livehire_endpoint_analytics_job_vacancies_additional_fields: $(livehire_endpoint_analytics_job_vacancies_additional_fields)
+        livehire_endpoint_analytics_hiring_managers: $(livehire_endpoint_analytics_hiring_managers)
+        livehire_endpoint_analytics_job_recruiters: $(livehire_endpoint_analytics_job_recruiters)
+        livehire_endpoint_analytics_job_candidates: $(livehire_endpoint_analytics_job_candidates)
+        livehire_endpoint_analytics_job_candidate_status: $(livehire_endpoint_analytics_job_candidate_status)
+        livehire_endpoint_analytics_job_offers: $(livehire_endpoint_analytics_job_offers)
+        livehire_endpoint_analytics_job_offer_additional_fields: $(livehire_endpoint_analytics_job_offer_additional_fields)
+        livehire_endpoint_analytics_profiles: $(livehire_endpoint_analytics_profiles)
+        techone_raas_api_auth_token: $(techone_raas_api_auth_token)
+        techone_ws_api_auth_token: $(techone_ws_api_auth_token)
+        techone_ws_api_p_suite_id: $(techone_ws_api_p_suite_id)
+        techone_raas_endpoint_employee_position_history_enquiry: $(techone_raas_endpoint_employee_position_history_enquiry)
+        techone_raas_endpoint_all_employees_leave_records: $(techone_raas_endpoint_all_employees_leave_records)
+        techone_raas_endpoint_most_recent_employee_position_status: $(techone_raas_endpoint_most_recent_employee_position_status)
+        techone_raas_endpoint_pl_period_balances: $(techone_raas_endpoint_pl_period_balances)
+        techone_raas_endpoint_plena_employee_position_history_enquiry: $(techone_raas_endpoint_plena_employee_position_history_enquiry)
+        techone_raas_endpoint_plena_employee_most_recent_position_status: $(techone_raas_endpoint_plena_employee_most_recent_position_status)
+        techone_raas_endpoint_employee_leave_balances: $(techone_raas_endpoint_employee_leave_balances)
+        techone_raas_endpoint_pay_transactions_ba: $(techone_raas_endpoint_pay_transactions_ba)
+        techone_raas_endpoint_cp_period_balances: $(techone_raas_endpoint_cp_period_balances)
+        techone_raas_endpoint_pl_period_balances_x: $(techone_raas_endpoint_pl_period_balances_x)
+        techone_ws_endpoint_employee_pay_trans: $(techone_ws_endpoint_employee_pay_trans)
+        techone_ws_endpoint_p_warehouse_name_employee_pay_trans: $(techone_ws_endpoint_p_warehouse_name_employee_pay_trans)
+        techone_ws_endpoint_p_table_name_employee_pay_trans: $(techone_ws_endpoint_p_table_name_employee_pay_trans)
+        techone_ws_endpoint_plena_inv_header: $(techone_ws_endpoint_plena_inv_header)
+        techone_ws_endpoint_p_warehouse_name_plena_inv_header: $(techone_ws_endpoint_p_warehouse_name_plena_inv_header)
+        techone_ws_endpoint_p_table_name_plena_inv_header: $(techone_ws_endpoint_p_table_name_plena_inv_header)
+        techone_ws_endpoint_plena_inv_lines: $(techone_ws_endpoint_plena_inv_lines)
+        techone_ws_endpoint_p_warehouse_name_plena_inv_lines: $(techone_ws_endpoint_p_warehouse_name_plena_inv_lines)
+        techone_ws_endpoint_p_table_name_plena_inv_lines: $(techone_ws_endpoint_p_table_name_plena_inv_lines)
+        salesforce_plena_username: $(salesforce_plena_username)
+        salesforce_plena_password: $(salesforce_plena_password)
+        salesforce_plena_security_token: $(salesforce_plena_security_token)
+        salesforce_dimple_username: $(salesforce_dimple_username)
+        salesforce_dimple_password: $(salesforce_dimple_password)
+        sharepoint_site_url: $(sharepoint_site_url)
+        sharepoint_username: $(sharepoint_username)
+        sharepoint_password: $(sharepoint_password)
+        sharepoint_folder_claro_wip_master_roster: $(sharepoint_folder_claro_wip_master_roster)
+        sharepoint_file_type_claro_wip_master_roster: $(sharepoint_file_type_claro_wip_master_roster)
+        sharepoint_folder_plena_kpi_target: $(sharepoint_folder_plena_kpi_target)
+        sharepoint_file_type_plena_kpi_target: $(sharepoint_file_type_plena_kpi_target)
+        alayacare_username: $(alayacare_username)
+        alayacare_password: $(alayacare_password)
+        alayacare_endpoint_rating_billable_item: $(alayacare_endpoint_rating_billable_item)
+        snowflake_account: $(snowflake_account)
+        snowflake_user: $(snowflake_user)
+        snowflake_password: $(snowflake_password)
+        snowflake_warehouse: $(snowflake_warehouse)
+        snowflake_database: $(snowflake_database_dev)
+        snowflake_schema_raw: $(snowflake_schema_raw)
+        snowflake_schema_curated: $(snowflake_schema_curated)
+        snowflake_table_alayacare_billable_item: $(snowflake_table_alayacare_billable_item)
+        snowflake_curated_sp_alayacare_billable_item: $(snowflake_curated_sp_alayacare_billable_item)
+
+  - job: test_job_prd
+    displayName: 'Dry-run the functions against prd endpoints'
+    condition: 
+      or(startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/release/'), 
+        and(startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/fix/'), 
+          eq(variables['System.PullRequest.TargetBranch'], 'refs/heads/prd')))
+    strategy:
+      matrix:
+        Python3x:
+          python.version: '3.11'
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(python.version)'
+      displayName: 'Use Python $(python.version)'
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --upgrade
+      displayName: 'Install dependencies'
+
+    - script: |
+        pip install pytest pytest-azurepipelines
+        pytest
+      displayName: 'pytest'
+      env:
+        is_local_dev: false
+        AzureWebJobsStorage: $(AzureWebJobsStorage)
+        FUNCTIONS_WORKER_RUNTIME: $(FUNCTIONS_WORKER_RUNTIME)
+        AzureWebJobsFeatureFlags: $(AzureWebJobsFeatureFlags)
+        livehire_client_id: $(livehire_client_id)
+        livehire_client_secret: $(livehire_client_secret)
+        livehire_authentication_url: $(livehire_authentication_url)
+        livehire_endpoint_analytics_activities: $(livehire_endpoint_analytics_activities)
+        livehire_endpoint_analytics_job_vacancies: $(livehire_endpoint_analytics_job_vacancies)
+        livehire_endpoint_analytics_job_vacancies_additional_fields: $(livehire_endpoint_analytics_job_vacancies_additional_fields)
+        livehire_endpoint_analytics_hiring_managers: $(livehire_endpoint_analytics_hiring_managers)
+        livehire_endpoint_analytics_job_recruiters: $(livehire_endpoint_analytics_job_recruiters)
+        livehire_endpoint_analytics_job_candidates: $(livehire_endpoint_analytics_job_candidates)
+        livehire_endpoint_analytics_job_candidate_status: $(livehire_endpoint_analytics_job_candidate_status)
+        livehire_endpoint_analytics_job_offers: $(livehire_endpoint_analytics_job_offers)
+        livehire_endpoint_analytics_job_offer_additional_fields: $(livehire_endpoint_analytics_job_offer_additional_fields)
+        livehire_endpoint_analytics_profiles: $(livehire_endpoint_analytics_profiles)
+        techone_raas_api_auth_token: $(techone_raas_api_auth_token)
+        techone_ws_api_auth_token: $(techone_ws_api_auth_token)
+        techone_ws_api_p_suite_id: $(techone_ws_api_p_suite_id)
+        techone_raas_endpoint_employee_position_history_enquiry: $(techone_raas_endpoint_employee_position_history_enquiry)
+        techone_raas_endpoint_all_employees_leave_records: $(techone_raas_endpoint_all_employees_leave_records)
+        techone_raas_endpoint_most_recent_employee_position_status: $(techone_raas_endpoint_most_recent_employee_position_status)
+        techone_raas_endpoint_pl_period_balances: $(techone_raas_endpoint_pl_period_balances)
+        techone_raas_endpoint_plena_employee_position_history_enquiry: $(techone_raas_endpoint_plena_employee_position_history_enquiry)
+        techone_raas_endpoint_plena_employee_most_recent_position_status: $(techone_raas_endpoint_plena_employee_most_recent_position_status)
+        techone_raas_endpoint_employee_leave_balances: $(techone_raas_endpoint_employee_leave_balances)
+        techone_raas_endpoint_pay_transactions_ba: $(techone_raas_endpoint_pay_transactions_ba)
+        techone_raas_endpoint_cp_period_balances: $(techone_raas_endpoint_cp_period_balances)
+        techone_raas_endpoint_pl_period_balances_x: $(techone_raas_endpoint_pl_period_balances_x)
+        techone_ws_endpoint_employee_pay_trans: $(techone_ws_endpoint_employee_pay_trans)
+        techone_ws_endpoint_p_warehouse_name_employee_pay_trans: $(techone_ws_endpoint_p_warehouse_name_employee_pay_trans)
+        techone_ws_endpoint_p_table_name_employee_pay_trans: $(techone_ws_endpoint_p_table_name_employee_pay_trans)
+        techone_ws_endpoint_plena_inv_header: $(techone_ws_endpoint_plena_inv_header)
+        techone_ws_endpoint_p_warehouse_name_plena_inv_header: $(techone_ws_endpoint_p_warehouse_name_plena_inv_header)
+        techone_ws_endpoint_p_table_name_plena_inv_header: $(techone_ws_endpoint_p_table_name_plena_inv_header)
+        techone_ws_endpoint_plena_inv_lines: $(techone_ws_endpoint_plena_inv_lines)
+        techone_ws_endpoint_p_warehouse_name_plena_inv_lines: $(techone_ws_endpoint_p_warehouse_name_plena_inv_lines)
+        techone_ws_endpoint_p_table_name_plena_inv_lines: $(techone_ws_endpoint_p_table_name_plena_inv_lines)
+        salesforce_plena_username: $(salesforce_plena_username)
+        salesforce_plena_password: $(salesforce_plena_password)
+        salesforce_plena_security_token: $(salesforce_plena_security_token)
+        salesforce_dimple_username: $(salesforce_dimple_username)
+        salesforce_dimple_password: $(salesforce_dimple_password)
+        sharepoint_site_url: $(sharepoint_site_url)
+        sharepoint_username: $(sharepoint_username)
+        sharepoint_password: $(sharepoint_password)
+        sharepoint_folder_claro_wip_master_roster: $(sharepoint_folder_claro_wip_master_roster)
+        sharepoint_file_type_claro_wip_master_roster: $(sharepoint_file_type_claro_wip_master_roster)
+        sharepoint_folder_plena_kpi_target: $(sharepoint_folder_plena_kpi_target)
+        sharepoint_file_type_plena_kpi_target: $(sharepoint_file_type_plena_kpi_target)
+        alayacare_username: $(alayacare_username)
+        alayacare_password: $(alayacare_password)
+        alayacare_endpoint_rating_billable_item: $(alayacare_endpoint_rating_billable_item)
+        snowflake_account: $(snowflake_account)
+        snowflake_user: $(snowflake_user)
+        snowflake_password: $(snowflake_password)
+        snowflake_warehouse: $(snowflake_warehouse)
+        snowflake_database: $(snowflake_database_prd)
+        snowflake_schema_raw: $(snowflake_schema_raw)
+        snowflake_schema_curated: $(snowflake_schema_curated)
+        snowflake_table_alayacare_billable_item: $(snowflake_table_alayacare_billable_item)
+        snowflake_curated_sp_alayacare_billable_item: $(snowflake_curated_sp_alayacare_billable_item)
+- stage: build_stage
+  displayName: 'Artifact Build Stage'
+  condition: and(
+    not(eq(variables['Build.Reason'], 'PullRequest')),
+    in(variables['Build.SourceBranch'], 'refs/heads/prd', 'refs/heads/stg'))
+  jobs:  
+  - job: build_job_dev
+    displayName: 'Build the function artifact to be deployed in dev'
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/stg')
+    steps:
+    - task: UsePythonVersion@0
+      displayName: 'Use Python 3.11'
+      inputs:
+        versionSpec: '3.11'
+        addToPath: true
+    - task: Bash@3
+      displayName: 'Install requirements'
+      inputs:
+        targetType: 'inline'
+        script: |
+          if [ -f extensions.csproj ]
+          then
+              dotnet build extensions.csproj --output ./bin
+          fi
+          pip install --target="./.python_packages/lib/site-packages" -r ./requirements.txt --upgrade
+    - task: CopyFiles@2
+      displayName: "Copy files required for build"
+      inputs:
+        SourceFolder: "$(System.DefaultWorkingDirectory)"
+        Contents: |
+          **/*
+          !*.md
+          !*.yml
+          !.git/**
+          !.gitignore
+        TargetFolder: "$(System.DefaultWorkingDirectory)/tmp"
+    - task: ArchiveFiles@2
+      displayName: "Archive files"
+      inputs:
+        rootFolderOrFile: "$(System.DefaultWorkingDirectory)/tmp"
+        includeRootFolder: false
+        archiveFile: "$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip"
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip'
+        artifactName: 'drop'
+
+  - job: build_job_prd
+    displayName: 'Build the function artifact to be deployed in prd'
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/prd')
+    steps:
+    - task: UsePythonVersion@0
+      displayName: 'Use Python 3.11'
+      inputs:
+        versionSpec: '3.11'
+        addToPath: true
+    - task: Bash@3
+      displayName: 'Install requirements'
+      inputs:
+        targetType: 'inline'
+        script: |
+          if [ -f extensions.csproj ]
+          then
+              dotnet build extensions.csproj --output ./bin
+          fi
+          pip install --target="./.python_packages/lib/site-packages" -r ./requirements.txt --upgrade
+    - task: CopyFiles@2
+      displayName: "Copy files required for build"
+      inputs:
+        SourceFolder: "$(System.DefaultWorkingDirectory)"
+        Contents: |
+          **/*
+          !*.md
+          !*.yml
+          !.git/**
+          !.gitignore
+        TargetFolder: "$(System.DefaultWorkingDirectory)/tmp"
+    - task: ArchiveFiles@2
+      displayName: "Archive files"
+      inputs:
+        rootFolderOrFile: "$(System.DefaultWorkingDirectory)/tmp"
+        includeRootFolder: false
+        archiveFile: "$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip"
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip'
+        artifactName: 'drop'
+        
+- stage: deploy_stage
+  displayName: 'Artifact Deploy Stage'
+  condition: and(not(or(failed(), canceled())),
+    not(eq(variables['Build.Reason'], 'PullRequest')),
+    in(variables['Build.SourceBranch'], 'refs/heads/prd', 'refs/heads/stg'))
+  jobs:  
+  - job: deploy_job_dev
+    displayName: 'Deploy the function artifact to dev'
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/stg')
+    steps:
+    - task: DownloadPipelineArtifact@2
+      inputs:
+        artifact: drop
+        patterns: '**/*.zip'
+    - task: AzureFunctionApp@2 # Add this at the end of your file
+      inputs:
+        runtimeStack: 'PYTHON|3.11'
+        azureSubscription: $(azureSubscription_dev)
+        appType: $(appType) # default is functionApp
+        appName: $(appName_dev)
+        package: $(Pipeline.Workspace)/**/*.zip
+        deploymentMethod: 'auto' # 'auto' | 'zipDeploy' | 'runFromPackage'. Required. Deployment method. Default: auto.
+        #Uncomment the next lines to deploy to a deployment slot
+        #Note that deployment slots is not supported for Linux Dynamic SKU
+        #deployToSlotOrASE: true
+        #resourceGroupName: '<Resource Group Name>'
+        #slotName: '<Slot name>'
+
+  - job: deploy_job_prd
+    displayName: 'Deploy the function artifact in prd'
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/prd')
+    steps:
+    - task: DownloadPipelineArtifact@2
+      inputs:
+        artifact: drop
+        patterns: '**/*.zip'
+    - task: AzureFunctionApp@2 # Add this at the end of your file
+      inputs:
+        runtimeStack: 'PYTHON|3.11'
+        azureSubscription: $(azureSubscription_prd)
+        appType: $(appType) # default is functionApp
+        appName: $(appName_prd)
+        package: $(Pipeline.Workspace)/**/*.zip
+        deploymentMethod: 'auto' # 'auto' | 'zipDeploy' | 'runFromPackage'. Required. Deployment method. Default: auto.
+        #Uncomment the next lines to deploy to a deployment slot
+        #Note that deployment slots is not supported for Linux Dynamic SKU
+        #deployToSlotOrASE: true
+        #resourceGroupName: '<Resource Group Name>'
+        #slotName: '<Slot name>'

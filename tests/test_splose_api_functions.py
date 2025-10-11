@@ -1,9 +1,11 @@
 import azure.functions as func
 import os
+import datetime
 import logging
 from test_utils import MockTimer
 from test_utils import MockOut
 from test_utils import MockIn
+from test_utils import _save_json_result_to_local_csv_file
 
 def test_list_invoices_from_splose(entry):
     resp = entry.splose_api_modules.list_objects_from_splose(
@@ -50,6 +52,12 @@ def test_func_splose_all_awaiting_payment_invoices(entry):
     _ = func_call(req)
     # Check the output - it should be a list
     assert(isinstance(_, list))
+    # save the result to a csv file for manual inspection
+    now = datetime.datetime.now()
+    filename = f"tests/data/__expected_splose_all_awaiting_payment_invoices_{now.strftime('%Y%m%d_%H%M%S')}"
+    _save_json_result_to_local_csv_file(result=_, filename=filename, sample_rows=99999)
+    
+
 
 def test_example_case(entry):
     """ This example shows how test case works. """

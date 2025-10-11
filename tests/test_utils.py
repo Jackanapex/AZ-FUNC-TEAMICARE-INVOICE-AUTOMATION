@@ -183,11 +183,15 @@ class MockIn():
     def get_body(self):
         return self.body
 
-def _save_json_result_to_local_csv_file(result:str, filename:str, sample_rows:int=3):
+def _save_json_result_to_local_csv_file(result, filename:str, sample_rows:int=3):
     # now use json.loads to load blobstr.val and save it as a table to output.csv
     import json
     import csv
-    data = json.loads(result)
+    # if result is string then load it as json
+    if isinstance(result, str):
+        data = json.loads(result)
+    else:
+        data = result
     with open(f"{filename}.csv", 'w', newline='', encoding="utf-8") as f:
         csvwriter = csv.writer(f)
         count = 0

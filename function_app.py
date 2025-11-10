@@ -14,57 +14,182 @@ from this_app_module import salesforce_api_modules
 from this_app_module import sharepoint_api_modules
 from this_app_module import alayacare_api_modules
 from this_app_module import splose_api_modules
+from this_app_module import myob_api_modules
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
+@app.blob_input(arg_name="inputblob",
+                path="teamicare/myob_authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobAccessToken",
+                path="teamicare/myob_authorize/access_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobRefreshToken",
+                path="teamicare/myob_authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str]) -> dict:
+    logging.info("Starting MYOB authorization process...")
+    try:
+        refreshed_result = myob_api_modules.refresh_access_token(
+            os.environ["myob_authorize_url"],
+            os.environ["myob_client_id"],
+            os.environ["myob_client_secret"],
+            inputblob
+        )
+    # when the refresh is failed, start from getting authorization code
+    except Exception as e:
+        logging.error(f"Failed to refresh MYOB access token: {e}, starting from authentication code")
+        # if refresh token fails, start from getting authorization code
+        access_code_url = myob_api_modules.create_get_access_code_url(
+            os.environ["myob_account_authorize_url"],
+            os.environ["myob_client_id"],
+            os.environ["myob_redirect_uri"],
+            os.environ["myob_invoice_scope"]
+        )
+        logging.info(f"Please visit the following URL to get the authorization code: {access_code_url}")
+        #TO-DO: send an email with the URL generated above
+        #Now stop this process because the log-in confirmation is done manually
+        return
+    else:
+        # if refresh is successful, save the access_token and refresh_token to blob storage
+        outputblobAccessToken.set(refreshed_result.get('access_token', ''))
+        outputblobRefreshToken.set(refreshed_result.get('refresh_token', ''))
+        logging.info("MYOB access token and refresh token have been updated successfully.")
+        logging.info(f"New access token: {refreshed_result.get('access_token', '')}")
+        logging.info(f"New refresh token: {refreshed_result.get('refresh_token', '')}")
+        return refreshed_result
+
+@app.function_name(name="func_get_new_refresh_token")
+@app.route(route="func_get_new_refresh_token", methods=["GET"])
+@app.blob_output(arg_name="outputblobAccessToken",
+                path="teamicare/myob_authorize/access_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobRefreshToken",
+                path="teamicare/myob_authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobBusinessId",
+                path="teamicare/myob_authorize/business_id",
+                connection="AzureWebJobsStorage")
+def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str], outputblobBusinessId: func.Out[str]) -> dict:
+    # TO-DO: this function gets triggered by an HTTP GET and saves the code parameter to blob storage
+    logging.info("func_get_new_refresh_token called.")
+    # get the parameter 'code' and 'businessId' from the query string
+    try:
+        code = req.params['code']
+        business_id = req.params['businessId']
+    except KeyError:
+        logging.error("No 'code' or 'businessId' parameter found in the request.")
+        return False
+    # use the code to call the get_access_token function
+    try:
+        access_token_result = myob_api_modules.get_access_token(
+            os.environ["myob_authorize_url"],
+            os.environ["myob_client_id"],
+            os.environ["myob_client_secret"],
+            code,
+            os.environ["myob_redirect_uri"],
+            os.environ["myob_invoice_scope"]
+        )
+    except Exception as e:
+        logging.error(f"Failed to get MYOB access token using authorization code: {e}")
+        return
+    else:
+        # if successful, save the access_token and refresh_token to blob storage
+        outputblobAccessToken.set(access_token_result.get('access_token', ''))
+        outputblobRefreshToken.set(access_token_result.get('refresh_token', ''))
+        outputblobBusinessId.set(business_id)
+        logging.info("MYOB access token and refresh token have been updated successfully.")
+        logging.info(f"New access token: {access_token_result.get('access_token', '')}")
+        logging.info(f"New refresh token: {access_token_result.get('refresh_token', '')}")
+        logging.info(f"New business ID: {business_id}")
+    return access_token_result
+
+# The following function gets MYOB company info using the access token stored in blob storage
+# can be used by all actual data operation functions to check and re-authenticate if needed
+@app.blob_input(arg_name="inputblobAccessToken",
+                path="teamicare/myob_authorize/access_token",
+                connection="AzureWebJobsStorage")
+@app.blob_input(arg_name="inputblobRefreshToken",
+                path="teamicare/myob_authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobAccessToken",
+                path="teamicare/myob_authorize/access_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobRefreshToken",
+                path="teamicare/myob_authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+def func_myob_get_company_info(
+        inputblobAccessToken: str, 
+        inputblobRefreshToken: str, 
+        outputblobAccessToken: func.Out[str], 
+        outputblobRefreshToken: func.Out[str]
+    ) -> dict:
+    # all these operations need to call get_company_info first
+    logging.info("Starting MYOB get company info process...")
+    try:
+        company_info_result = myob_api_modules.get_company_info(inputblobAccessToken)
+    except Exception as e:
+        logging.error(f"Failed to get MYOB company info: {e}, need to re-authenticate")
+        # if access token is expired, refresh it
+        try:
+            refreshed_result = func_myob_authorize(
+                inputblobRefreshToken,
+                outputblobAccessToken,
+                outputblobRefreshToken
+            )
+        except Exception as e:
+            logging.error(f"Failed to refresh MYOB access token: {e}")
+            return
+        else:
+            # if refresh is successful, retry get_company_info with new access token
+            try:
+                company_info_result = myob_api_modules.get_company_info(
+                    refreshed_result.get('access_token', '')
+                )
+            except Exception as e:
+                logging.error(f"Failed to get MYOB company info after refreshing access token: {e}")
+                return
+            else:
+                logging.info(f"MYOB company info retrieved successfully after refreshing access token: {company_info_result}")
+                return company_info_result
+    else:
+        logging.info(f"MYOB company info retrieved successfully: {json.dumps(company_info_result)[:100]}...")  # log only the first 100 characters
+    return company_info_result
+
+# TO-DO: build actual MYOB data functions
+# always call func_myob_get_company_info above and check if return is a dict and has the 'Build' key
+# if positive, proceed with actual data operations
+# always use the following bindings of
+@app.blob_input(arg_name="inputblobBusinessId",
+                path="teamicare/myob_authorize/business_id",
+                connection="AzureWebJobsStorage")
+@app.blob_input(arg_name="inputblobAccessToken",
+                path="teamicare/myob_authorize/access_token",
+                connection="AzureWebJobsStorage")
+@app.blob_input(arg_name="inputblobRefreshToken",
+                path="teamicare/myob_authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobAccessToken",
+                path="teamicare/myob_authorize/access_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobRefreshToken",
+                path="teamicare/myob_authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+def func_myob_data_operation_example(
+        inputblobBusinessId: str,
+        inputblobAccessToken: str, 
+        inputblobRefreshToken: str, 
+        outputblobAccessToken: func.Out[str], 
+        outputblobRefreshToken: func.Out[str]
+    ) -> dict:
+    return {}
+
+@app.function_name(name="func_splose_all_awaiting_payment_invoices")
 @app.timer_trigger(schedule="0 0 19 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
 def func_splose_all_awaiting_payment_invoices(myTimer: func.TimerRequest):
     if myTimer.past_due:
         logging.info('The timer is past due!')
-    secret = os.environ["splose_api_secret"]
-    result_invoice_list = splose_api_modules.list_objects_from_splose(
-        os.environ["splose_api_url"], 
-        os.environ["splose_api_url_list_invoices"], 
-        secret, [], params = {'status': 'Awaiting Payment'})
-    logging.info(f"Number of invoices with Awaiting Payment status: {len(result_invoice_list)}")
-    result_contact_list = splose_api_modules.list_objects_from_splose(
-        os.environ["splose_api_url"], 
-        os.environ["splose_api_url_list_contacts"], 
-        secret, [], params = {'include_archived': 'true'})
-    logging.info(f"Number of contacts retrieved: {len(result_contact_list)}")
-    result_patient_list = splose_api_modules.list_objects_from_splose(
-        os.environ["splose_api_url"], 
-        os.environ["splose_api_url_list_patients"], 
-        secret, [], params = {'include_archived': 'true'})
-    logging.info(f"Number of patients retrieved: {len(result_patient_list)}")
-    result_practitioner_list = splose_api_modules.list_objects_from_splose(
-        os.environ["splose_api_url"], 
-        os.environ["splose_api_url_list_practitioners"], 
-        secret, [], params = {'include_archived': 'true'})
-    logging.info(f"Number of practitioners retrieved: {len(result_practitioner_list)}")
-    # convert result_invoice_list to a flat dataframe
-    df_invoices = pd.json_normalize(result_invoice_list)
-    df_contacts = pd.json_normalize(result_contact_list)
-    df_patients = pd.json_normalize(result_patient_list)
-    df_practitioners = pd.json_normalize(result_practitioner_list)
-    if len(df_invoices) > 0:
-        df_merged = df_invoices.merge(df_contacts[['id', 'type', 'name', 'companyName', 'email', 'phoneNumbers', 'country']], how='left', left_on='contactId', right_on='id', suffixes=('', '_contact'))
-        df_merged = df_merged.merge(df_patients[['id', 'title', 'firstname', 'lastname', 'sex', 'email', 'phoneNumbers', 'timezone', 'country']], how='left', left_on='patientId', right_on='id', suffixes=('', '_patient'))
-        df_merged = df_merged.merge(df_practitioners[['id', 'title', 'firstname', 'lastname', 'profession', 'email', 'roleName', 'timezone']], how='left', left_on='practitionerId', right_on='id', suffixes=('', '_practitioner'))
-        df_merged = df_merged.drop(columns=['id_contact', 'id_patient', 'id_practitioner'])
-        # convert the issueDate and due_date to datetime format
-        # df_merged['issueDate'] = pd.to_datetime(df_merged['issueDate']).dt.date
-        # df_merged['dueDate'] = pd.to_datetime(df_merged['dueDate']).dt.date
-        # convert the total and balance to numeric format
-        # df_merged['subtotal'] = pd.to_numeric(df_merged['subtotal'])
-        # df_merged['total'] = pd.to_numeric(df_merged['total'])
-        # df_merged['tax'] = pd.to_numeric(df_merged['tax'])
-        # sort the dataframe by due_date ascending
-        df_merged = df_merged.sort_values(by=['dueDate'])
-        # convert the dataframe to a list of dictionaries
-        result_list = df_merged.to_dict(orient='records')
-    else:
-        logging.info("No invoices with Awaiting Payment status found.")
+    result_list = splose_api_modules.get_all_awaiting_payment_invoices()
     return result_list
 
 

@@ -1,6 +1,7 @@
 import azure.functions as func
 import os
 import datetime
+import json
 import logging
 from test_utils import MockTimer
 from test_utils import MockOut
@@ -46,18 +47,44 @@ def test_list_practitioners_from_splose(entry):
     assert(isinstance(resp, list))
     assert(len(resp) > 0)
 
-def test_func_splose_all_awaiting_payment_invoices(entry):
-    func_call = entry.func_splose_all_awaiting_payment_invoices.build().get_user_function()
-    req = MockTimer()
-    _ = func_call(req)
+def test_post_a_payment_to_invoice(entry):
+    # first get a list of invoices with Awaiting Payment status
+    payment_data = {
+        "amount": 1,
+        "payment_date": datetime.datetime.now().strftime('%Y-%m-%d'),
+        "payment_method": "Credit Card",
+        "notes": "Test payment via API"
+    }
+    resp = entry.splose_api_modules.post_payment_to_invoice(
+        base_url = os.environ['splose_api_url'],
+        this_url = os.environ['splose_api_url_list_payments'],
+        secret = os.environ['splose_api_secret'],
+        payment_data = payment_data
+    )
+    assert(isinstance(resp, dict))
+    assert(resp.get('status') == 'Success')
+
+def test_get_all_awaiting_payment_invoices(entry):
+    patient_to_contact_mapping = entry.splose_api_modules.get_patient_to_contact_mapping()
+    _ = entry.splose_api_modules.get_all_awaiting_payment_invoices(patient_to_contact_mapping)
     # Check the output - it should be a list
     assert(isinstance(_, list))
     # save the result to a csv file for manual inspection
     now = datetime.datetime.now()
     filename = f"tests/data/__expected_splose_all_awaiting_payment_invoices_{now.strftime('%Y%m%d_%H%M%S')}"
     _save_json_result_to_local_csv_file(result=_, filename=filename, sample_rows=99999)
-    
 
+def test_get_patient_to_contact_mapping(entry):
+    _ = entry.splose_api_modules.get_patient_to_contact_mapping()
+    # Check the output - it should be a dict
+    assert(isinstance(_, dict))
+    assert(len(_) > 0)
+    # save the result to a pretty formatted json file for manual inspection
+    now = datetime.datetime.now()
+    filename = f"tests/data/__expected_splose_patient_to_contact_mapping_{now.strftime('%Y%m%d_%H%M%S')}.json"
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(_, f, ensure_ascii=False, indent=4)
+    
 
 def test_example_case(entry):
     """ This example shows how test case works. """

@@ -70,6 +70,5 @@ jobs:
         id: deploy-to-function
         with:
           app-name: 'func-teamicare-invoice-automation'
-          slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_169F9E4EC0F144C59DFE6FE9174008A1 }}

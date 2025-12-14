@@ -2,7 +2,6 @@ import requests
 import logging
 import time
 import os
-import base64
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from datetime import datetime
 

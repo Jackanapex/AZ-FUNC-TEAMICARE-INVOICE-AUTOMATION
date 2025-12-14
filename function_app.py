@@ -11,15 +11,15 @@ from this_app_module import myob_api_modules
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
-@app.blob_input(arg_name="inputblob",
-                path="teamicare/myob_authorize/refresh_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
-                connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblob",
+#                 path="teamicare/myob_authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobAccessToken",
+#                 path="teamicare/myob_authorize/access_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobRefreshToken",
+#                 path="teamicare/myob_authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
 def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str]) -> dict:
     logging.info("Starting MYOB authorization process...")
     try:
@@ -55,15 +55,15 @@ def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], ou
 @app.function_name(name="func_get_new_refresh_token")
 @app.route(route="func_get_new_refresh_token", methods=["GET"])
 @app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobBusinessId",
-                path="teamicare/myob_authorize/business_id",
+                path="teamicare/myob-authorize/business_id",
                 connection="AzureWebJobsStorage")
-def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str], outputblobBusinessId: func.Out[str]) -> dict:
+def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str], outputblobBusinessId: func.Out[str]) -> func.HttpResponse:
     # TO-DO: this function gets triggered by an HTTP GET and saves the code parameter to blob storage
     logging.info("func_get_new_refresh_token called.")
     # get the parameter 'code' and 'businessId' from the query string
@@ -72,7 +72,7 @@ def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: fun
         business_id = req.params['businessId']
     except KeyError:
         logging.error("No 'code' or 'businessId' parameter found in the request.")
-        return False
+        return func.HttpResponse(f"No 'code' or 'businessId' parameter found in the request.", status_code=400)
     # use the code to call the get_access_token function
     try:
         access_token_result = myob_api_modules.get_access_token(
@@ -85,7 +85,7 @@ def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: fun
         )
     except Exception as e:
         logging.error(f"Failed to get MYOB access token using authorization code: {e}")
-        return
+        return func.HttpResponse(f"Failed to get MYOB access token using authorization code: {e}", status_code=500)
     else:
         # if successful, save the access_token and refresh_token to blob storage
         outputblobAccessToken.set(access_token_result.get('access_token', ''))
@@ -99,18 +99,18 @@ def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: fun
 
 # The following function gets MYOB company info using the access token stored in blob storage
 # can be used by all actual data operation functions to check and re-authenticate if needed
-@app.blob_input(arg_name="inputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
-                connection="AzureWebJobsStorage")
-@app.blob_input(arg_name="inputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
-                connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobAccessToken",
+#                 path="teamicare/myob_authorize/access_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobRefreshToken",
+#                 path="teamicare/myob_authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobAccessToken",
+#                 path="teamicare/myob_authorize/access_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobRefreshToken",
+#                 path="teamicare/myob_authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
 def func_myob_get_company_info(
         inputblobAccessToken: str, 
         inputblobRefreshToken: str, 
@@ -158,21 +158,21 @@ def func_myob_get_company_info(
 # always call func_myob_get_company_info above and check if return is a dict and has the 'Build' key
 # if positive, proceed with actual data operations
 # always use the following bindings of
-@app.blob_input(arg_name="inputblobBusinessId",
-                path="teamicare/myob_authorize/business_id",
-                connection="AzureWebJobsStorage")
-@app.blob_input(arg_name="inputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
-                connection="AzureWebJobsStorage")
-@app.blob_input(arg_name="inputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
-                connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobBusinessId",
+#                 path="teamicare/myob_authorize/business_id",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobAccessToken",
+#                 path="teamicare/myob_authorize/access_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobRefreshToken",
+#                 path="teamicare/myob_authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobAccessToken",
+#                 path="teamicare/myob_authorize/access_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobRefreshToken",
+#                 path="teamicare/myob_authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
 def func_myob_data_operation_example(
         inputblobBusinessId: str,
         inputblobAccessToken: str, 
@@ -200,22 +200,22 @@ def func_myob_data_operation_example(
 @app.function_name(name="func_filter_splose_invoice_for_myob_imports")
 @app.timer_trigger(schedule="0 0 19 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
 @app.blob_input(arg_name="inputblobBusinessId",
-                path="teamicare/myob_authorize/business_id",
+                path="teamicare/myob-authorize/business_id",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobSploseInvoices",
-                path="teamicare/splose_outbound/splose_invoices_to_myob_import_{DateTime}.json",
+                path="teamicare/splose-outbound/splose_invoices_to_myob_import_{DateTime}.json",
                 connection="AzureWebJobsStorage")
 def func_filter_splose_invoice_for_myob_import(
     myTimer: func.TimerRequest,
@@ -265,28 +265,28 @@ def func_filter_splose_invoice_for_myob_import(
 
 @app.function_name(name="func_convert_splose_invoices_to_myob_customers")
 @app.blob_trigger(arg_name="client",
-                  path="teamicare/splose_outbound/",
+                  path="teamicare/splose-outbound",
                   connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobBusinessId",
-                path="teamicare/myob_authorize/business_id",
+                path="teamicare/myob-authorize/business_id",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobMyobUpsertedCustomers",
-                path="teamicare/myob_customer_outbound/myob_upserted_customers.json",
+                path="teamicare/myob-customer-outbound/myob_upserted_customers.json",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobMyobNewInvoices",
-                path="teamicare/myob_invoice_outbound/myob_new_invoices_{DateTime}.json",
+                path="teamicare/myob-invoice-outbound/myob_new_invoices_{DateTime}.json",
                 connection="AzureWebJobsStorage")
 def func_convert_splose_invoices_to_myob_customers(
     client: blob.BlobClient,
@@ -336,28 +336,28 @@ def func_convert_splose_invoices_to_myob_customers(
 
 @app.function_name(name="func_import_splose_invoices_to_myob")
 @app.blob_trigger(arg_name="client",
-                  path="teamicare/myob_invoice_outbound/",
+                  path="teamicare/myob-invoice-outbound",
                   connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobBusinessId",
-                path="teamicare/myob_authorize/business_id",
+                path="teamicare/myob-authorize/business_id",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobMyobUpsertedCustomers",
-                path="teamicare/myob_customer_outbound/myob_upserted_customers.json",
+                path="teamicare/myob-customer-outbound/myob_upserted_customers.json",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobMyobNewInvoices",
-                path="teamicare/myob_invoice_inbound/myob_new_invoices_imported_{DateTime}.json",
+                path="teamicare/myob-invoice-inbound/myob_new_invoices_imported_{DateTime}.json",
                 connection="AzureWebJobsStorage")
 def func_import_splose_invoices_to_myob(
     client: blob.BlobClient,
@@ -414,28 +414,28 @@ def func_import_splose_invoices_to_myob(
 @app.function_name(name="func_get_customer_payments_after_date_and_convert_to_invoice_key")
 @app.timer_trigger(schedule="0 0 18 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
 @app.blob_input(arg_name="inputblobpage",
-                path="teamicare/myob_payment_inbound/myob_payment_from.txt",
+                path="teamicare/myob-payment-inbound/myob_payment_from.txt",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobBusinessId",
-                path="teamicare/myob_authorize/business_id",
+                path="teamicare/myob-authorize/business_id",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_input(arg_name="inputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob_authorize/access_token",
+                path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob_authorize/refresh_token",
+                path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobMyobNewPayments",
-                path="teamicare/myob_payment_outbound/myob_new_payments_{DateTime}.json",
+                path="teamicare/myob-payment-outbound/myob_new_payments_{DateTime}.json",
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobpage",
-                path="teamicare/myob_payment_inbound/myob_payment_from.txt",
+                path="teamicare/myob-payment-inbound/myob_payment_from.txt",
                 connection="AzureWebJobsStorage")
 def func_get_customer_payments_after_date_and_convert_to_invoice_key(
     myTimer: func.TimerRequest,
@@ -490,10 +490,10 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
 
 @app.function_name(name="func_update_splose_invoices_with_payment_gaps")
 @app.blob_trigger(arg_name="client",
-                    path="teamicare/myob_payment_outbound/",
+                    path="teamicare/myob-payment-outbound",
                     connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobSploseInvoicesWithPayments",
-                    path="teamicare/splose_inbound/splose_invoices_updated_with_payments_{DateTime}.json",
+                    path="teamicare/splose-inbound/splose_invoices_updated_with_payments_{DateTime}.json",
                     connection="AzureWebJobsStorage")
 def func_update_splose_invoices_with_payment_gaps(
     client: blob.BlobClient,

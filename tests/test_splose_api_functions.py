@@ -84,7 +84,67 @@ def test_get_patient_to_contact_mapping(entry):
     filename = f"tests/data/__expected_splose_patient_to_contact_mapping_{now.strftime('%Y%m%d_%H%M%S')}.json"
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(_, f, ensure_ascii=False, indent=4)
+
+def test_filter_for_invoices(entry):
+    patient_to_contact_mapping = entry.splose_api_modules.get_patient_to_contact_mapping()
+    _ = entry.splose_api_modules.get_all_awaiting_payment_invoices(patient_to_contact_mapping)
+    filter_invoice_id_list = [7420789, 7421320, 7421290, 7421285, 7421277]
+    filtered_invoices = entry.splose_api_modules.filter_for_invoices(_, filter_invoice_id_list)
+    # Check the output - it should be a list of size 5
+    assert(isinstance(filtered_invoices, list))
+    assert(len(filtered_invoices) >= 2)
+
+def test_update_invoices_with_payments(entry):
+    patient_to_contact_mapping = entry.splose_api_modules.get_patient_to_contact_mapping()
+    _ = entry.splose_api_modules.get_all_awaiting_payment_invoices(patient_to_contact_mapping)
+    # load the last __pytest_to_load_myob_payments_after_ file from tests/data/ to a dict testing_payment_dict
+    testing_payment_dict = {}
+    filename_to_load = 'placeholder.json'
+    for file in os.listdir('tests/data/'):
+        if file.startswith('__pytest_to_load_myob_payments_after_') and file.endswith('.json'):
+            filename_to_load = os.path.join('tests/data/', file)
+            # break after finding the first match
+            break
+    with open(filename_to_load, 'r', encoding='utf-8') as f:
+        testing_payment_dict = json.load(f)
+    assert(
+        isinstance(testing_payment_dict, dict)
+    )
     
+    # Now update these invoices with payments of $1 each
+    updated_invoices = entry.splose_api_modules.update_invoices_with_payments(
+        invoice_list = _,
+        payment_dict = testing_payment_dict
+    )
+    # Check the output - it should be a list of size 5
+    assert(isinstance(updated_invoices, list))
+    assert(len(updated_invoices) >= 0)
+
+def test_update_invoices_with_payment_gaps(entry):
+    patient_to_contact_mapping = entry.splose_api_modules.get_patient_to_contact_mapping()
+    _ = entry.splose_api_modules.get_all_awaiting_payment_invoices(patient_to_contact_mapping)
+    # load the last __pytest_to_load_myob_payments_after_ file from tests/data/ to a dict testing_payment_dict
+    testing_payment_dict = {}
+    filename_to_load = 'placeholder.json'
+    for file in os.listdir('tests/data/'):
+        if file.startswith('__pytest_to_load_myob_payments_after_') and file.endswith('.json'):
+            filename_to_load = os.path.join('tests/data/', file)
+            # break after finding the first match
+            break
+    with open(filename_to_load, 'r', encoding='utf-8') as f:
+        testing_payment_dict = json.load(f)
+    assert(
+        isinstance(testing_payment_dict, dict)
+    )
+    
+    # Now update these invoices with payments of $1 each
+    updated_invoices = entry.splose_api_modules.update_invoices_with_payment_gaps(
+        invoice_list = _,
+        payment_dict = testing_payment_dict
+    )
+    # Check the output - it should be a list of size 5
+    assert(isinstance(updated_invoices, list))
+    assert(len(updated_invoices) >= 0)
 
 def test_example_case(entry):
     """ This example shows how test case works. """

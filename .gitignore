@@ -137,3 +137,4 @@ __azurite_db*__.json
 # all vscode config files under .vscode folder
 .vscode
 .vscode/*
+tests/data/

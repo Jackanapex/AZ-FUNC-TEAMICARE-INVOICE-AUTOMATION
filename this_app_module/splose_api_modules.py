@@ -80,12 +80,14 @@ def get_patient_to_contact_mapping() -> dict:
     patient_to_contact_mapping  = {}
     for contact in result_contact_list:
         patient_id_list = contact.get('associatedPatientIds', [])
+        # convert all patient IDs to int first
+        patient_id_list = [int(pid) for pid in patient_id_list]
         contact_id = contact.get('id')
         # add the contact_id to each list by patient_id in the mapping
         for patient_id in patient_id_list:
             if patient_id not in patient_to_contact_mapping:
                 patient_to_contact_mapping[str(patient_id)] = []
-            patient_to_contact_mapping[str(patient_id)].append(contact_id)
+            patient_to_contact_mapping[str(patient_id)].append(int(contact_id))
     logging.info(f"Number of patient to contact mappings retrieved: {len(patient_to_contact_mapping)}")
     return patient_to_contact_mapping
 
@@ -121,15 +123,30 @@ def get_all_awaiting_payment_invoices(patient_to_contact_mapping: dict) -> list:
     df_practitioners = pd.json_normalize(result_practitioner_list)
     if len(df_invoices) > 0:
         df_merged = df_invoices.merge(df_contacts[['id', 'name', 'companyName', 'email', 'phoneNumbers', 'addressL1', 'addressL2', 'addressL3', 'suburb', 'state', 'postalCode', 'country']].add_prefix('contact_'), how='left', left_on='contactId', right_on='contact_id')
-        df_merged = df_merged.merge(df_patients[['id', 'firstname', 'lastname', 'preferredName', 'email', 'phoneNumbers', 'addressL1', 'addressL2', 'addressL3', 'city', 'state', 'postalCode', 'country', 'ndisNumber', 'ndisInfo']].add_prefix('patient_'), how='left', left_on='patientId', right_on='patient_id')
+        df_merged = df_merged.merge(df_patients[['id', 'firstname', 'lastname', 'preferredName', 'email', 'phoneNumbers', 'addressL1', 'addressL2', 'addressL3', 'city', 'state', 'postalCode', 'country', 'ndisNumber', 'ndisInfo', 'birthdate']].add_prefix('patient_'), how='left', left_on='patientId', right_on='patient_id')
         df_merged = df_merged.merge(df_practitioners[['id', 'firstname', 'lastname', 'providerNumbers']].add_prefix('practitioner_'), how='left', left_on='practitionerId', right_on='practitioner_id')
         df_merged = df_merged.drop(columns=['contact_id', 'patient_id', 'practitioner_id'])
+        # convert id, patientId, contactId, locationId, practitionerId to int
+        df_merged['id'] = df_merged['id'].astype(pd.Int64Dtype())
+        df_merged['patientId'] = df_merged['patientId'].astype(pd.Int64Dtype())
+        df_merged['locationId'] = df_merged['locationId'].astype(pd.Int64Dtype())
+        df_merged['practitionerId'] = df_merged['practitionerId'].astype(pd.Int64Dtype())
+        df_merged['contactId'] = df_merged['contactId'].astype(pd.Int64Dtype())
         # add a flag column 'contact_display_id' to keep track of the contact manipulations requested
         # default to 'SPL_C_' + str(contactId) if contactId is present indicating original Splose contact, otherwise set to nan
-        df_merged['contact_display_id'] = df_merged['contactId'].apply(lambda x: f"SPL_C_{x}" if pd.notna(x) else None)
-        # also add a column 'contact_ndis_number' to keep track of the NDIS number from contact if available
-        df_merged['contact_ndis_number'] = None
+        df_merged['contact_display_id'] = df_merged['contactId'].apply(lambda x: f"SPL_C_{int(x)}" if pd.notna(x) else None)
+        # also add a column 'contact_ndis_number' to keep track of the ndisNumber from patient
+        df_merged['contact_ndis_number'] = df_merged['patient_ndisNumber']
+        # also add a column 'contact_ndis_nominee_name' to keep track of the first and last names from the patient_ndisInfo object column if available
         df_merged['contact_ndis_nominee_name'] = None
+        for idx, row in df_merged.iterrows():
+            ndis_info = row['patient_ndisInfo']
+            if ndis_info and isinstance(ndis_info, dict):
+                nominee_firstname = ndis_info.get('nomineeFirstName')
+                nominee_lastname = ndis_info.get('nomineeLastName')
+                if nominee_firstname and nominee_lastname:
+                    nominee_name = f"{nominee_firstname} {nominee_lastname}"
+                    df_merged.at[idx, 'contact_ndis_nominee_name'] = nominee_name
         # check and calculate based on manipulation rules:
         # 1. use the first letter in reference to categorize types of invoices (N - NDIS, H or S - SAH, P - PRIVATE)
         df_merged['invoice_type'] = df_merged['reference'].str[0].map({
@@ -152,15 +169,6 @@ def get_all_awaiting_payment_invoices(patient_to_contact_mapping: dict) -> list:
                 df_merged.at[idx, 'contact_postalCode'] = row['patient_postalCode']
                 df_merged.at[idx, 'contact_country'] = row['patient_country']
                 df_merged.at[idx, 'contact_display_id'] = 'SPL_P_' + str(row['patientId'])
-                df_merged.at[idx, 'contact_ndis_number'] = row['patient_ndisNumber']
-                # contact_ndis_nominee_name is extracted from patient_ndisInfo if available
-                ndis_info = row['patient_ndisInfo']
-                if ndis_info and isinstance(ndis_info, dict):
-                    nominee_firstname = ndis_info.get('nomineeFirstName')
-                    nominee_lastname = ndis_info.get('nomineeLastName')
-                    if nominee_firstname and nominee_lastname:
-                        nominee_name = f"{nominee_firstname} {nominee_lastname}"
-                    df_merged.at[idx, 'contact_ndis_nominee_name'] = nominee_name
         # 3. for SAH invoices, if contactId is missing, then use patientId to find the first associated contactId from patient_to_contact_mapping
         for idx, row in df_merged.iterrows():
             if row['invoice_type'] == 'SAH' and pd.isna(row['contactId']):
@@ -191,7 +199,6 @@ def get_all_awaiting_payment_invoices(patient_to_contact_mapping: dict) -> list:
         logging.info("No invoices with Awaiting Payment status found.")
     return result_list
 
-# TO-DO: add test case
 def filter_for_invoices(invoice_list: list, invoice_filter_id_list: list) -> list:
     """
     Filter function to get only invoices with Awaiting Payment status.
@@ -200,28 +207,27 @@ def filter_for_invoices(invoice_list: list, invoice_filter_id_list: list) -> lis
     filtered_invoices = [invoice for invoice in invoice_list if invoice['id'] in invoice_filter_id_list]
     return filtered_invoices
 
-# TO-DO: add test case
 def update_invoices_with_payments(invoice_list: list, payment_dict: dict) -> list:
     """
     Compose invoices with their corresponding payments.
     """
     # payment list is a list of dictionaries with the structure
-    # {'invoice_id_0001': {'amount': 100.0, 'paymentDate': '2023-01-01'}, 'invoice_id_0002': {'amount': 250.0, 'paymentDate': '2023-01-02'}, ...}
+    # {'invoiceNumber_0001': {'amount': 100.0, 'paymentDate': '2023-01-01'}, 'invoiceNumber_0002': {'amount': 250.0, 'paymentDate': '2023-01-02'}, ...}
     # iterate through the invoice list and add new keys of 'amount' if there is a matching payment in the payment list
     successful_list = []
     for invoice in invoice_list:
-        if str(invoice['id']) in payment_dict:
+        if str(invoice['invoiceNumber']) in payment_dict:
             # create a payment record based on the invoice and payment_dict[str(invoice['id'])]
             this_payment_record = {
                 'patientId': invoice['patientId'],
                 'locationId': invoice['locationId'],
                 'paymentMethodId': 38158, # assuming a default payment method ID
-                'amount': payment_dict[str(invoice['id'])]['amount'],
-                'paymentDate': payment_dict[str(invoice['id'])]['paymentDate'],
+                'amount': payment_dict[str(invoice['invoiceNumber'])]['amount'],
+                'paymentDate': payment_dict[str(invoice['invoiceNumber'])]['paymentDate'],
                 'paymentInvoices': [
                     {
                     'invoiceId': invoice['id'],
-                    'amount': payment_dict[str(invoice['id'])]['amount']
+                    'amount': payment_dict[str(invoice['invoiceNumber'])]['amount']
                     }
                 ]
             }
@@ -233,8 +239,46 @@ def update_invoices_with_payments(invoice_list: list, payment_dict: dict) -> lis
                 this_payment_record
             )
             if response.status_code == 201:
-                successful_list.append(invoice['id'])
-                logging.info(f"Successfully created payment for invoice ID {invoice['id']}")
+                successful_list.append(invoice['invoiceNumber'])
+                logging.info(f"Successfully created payment for invoice Number {invoice['invoiceNumber']}")
             else:
-                logging.error(f"Failed to create payment for invoice ID {invoice['id']}: {response.json()}")
+                logging.error(f"Failed to create payment for invoice Number {invoice['invoiceNumber']}: {response.json()}")
+    return successful_list
+
+def update_invoices_with_payment_gaps(invoice_list: list, payment_dict: dict) -> list:
+    """
+    Compose invoices with their corresponding payments.
+    """
+    # payment list is a list of dictionaries with the structure
+    # {'invoiceNumber_0001': {'amount': 100.0, 'paymentDate': '2023-01-01'}, 'invoiceNumber_0002': {'amount': 250.0, 'paymentDate': '2023-01-02'}, ...}
+    # iterate through the invoice list and add new keys of 'amount' if there is a matching payment in the payment list
+    successful_list = []
+    for invoice in invoice_list:
+        if (str(invoice['invoiceNumber']) in payment_dict) and (invoice['paidAmount'] < invoice['total']):
+            # create a payment record based on the invoice and payment_dict[str(invoice['id'])]
+            this_payment_record = {
+                'patientId': invoice['patientId'],
+                'locationId': invoice['locationId'],
+                'paymentMethodId': 38157, # assuming a default payment method ID
+                'amount': round(invoice['total'] - invoice['paidAmount'], 2),  # round to 2 decimal places
+                'paymentDate': payment_dict[str(invoice['invoiceNumber'])]['paymentDate'],
+                'paymentInvoices': [
+                    {
+                    'invoiceId': invoice['id'],
+                    'amount': round(invoice['total'] - invoice['paidAmount'], 2)
+                    }
+                ]
+            }
+            # and then call create_one_object_in_splose to create the payment in Splose
+            response = create_one_object_in_splose(
+                os.environ["splose_api_url"], 
+                os.environ["splose_api_url_list_payments"],
+                os.environ["splose_api_secret"],
+                this_payment_record
+            )
+            if response.status_code == 201:
+                successful_list.append(invoice['invoiceNumber'])
+                logging.info(f"Successfully created payment for invoice Number {invoice['invoiceNumber']}")
+            else:
+                logging.error(f"Failed to create payment for invoice Number {invoice['invoiceNumber']}: {response.json()}")
     return successful_list

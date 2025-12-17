@@ -4,5 +4,14 @@ __azurite_db*__.json
 __blobstorage__
 __queuestorage__
 local.settings.json
+tests
 test
 .venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+pytest.ini
+.gitignore
+.github
+azure-pipelines.yml

@@ -27,6 +27,7 @@ __pycache__/
 venv/
 .venv/
 env/
+.venv2/
 
 # Local Function Settings (SECURITY CRITICAL)
 # Prevents accidentally deploying secrets to the cloud

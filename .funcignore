@@ -1,16 +1,44 @@
-.git*
-.vscode
-__azurite_db*__.json
-__blobstorage__
-__queuestorage__
-local.settings.json
-tests
-test
-__pycache__
+# Editor / IDE files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Git files
+.git/
+.gitignore
+
+# CI/CD and GitHub files
+.github/
+.funcignore
+README.md
+
+# Python compiled files and cache
+__pycache__/
 *.pyc
 *.pyo
-.pytest_cache
-pytest.ini
-.gitignore
-.github
-azure-pipelines.yml
+*.pyd
+
+# Virtual Environments (Local)
+# It is critical to ignore these to prevent Linux/Windows binary conflicts
+venv/
+.venv/
+env/
+
+# Local Function Settings (SECURITY CRITICAL)
+# Prevents accidentally deploying secrets to the cloud
+local.settings.json
+
+# Test folders and cache
+tests/
+test/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Deployment Artifacts
+# If you create the zip in the root, don't zip the zip!
+release.zip

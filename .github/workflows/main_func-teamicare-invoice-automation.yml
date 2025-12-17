@@ -24,14 +24,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python version
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      # - name: Setup Python version
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: ${{ env.PYTHON_VERSION }}
 
 
-      - name: Install dependencies
-        run: pip install --target="./.python_packages/lib/site-packages" -r requirements.txt
+      # - name: Install dependencies
+      #   run: pip install --target="./.python_packages/lib/site-packages" -r requirements.txt
 
       # Optional: Add step to run tests here
 
@@ -77,4 +77,6 @@ jobs:
           app-name: 'func-teamicare-invoice-automation'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           sku: 'flexconsumption'
+          # Force Azure to install dependencies from requirements.txt
+          scm-do-build-during-deployment: true
           

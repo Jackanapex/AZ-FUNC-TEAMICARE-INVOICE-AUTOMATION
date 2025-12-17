@@ -1,7 +1,7 @@
 import logging
 
 import azure.functions as func
-import azurefunctions.extensions.bindings.blob as blob
+# import azurefunctions.extensions.bindings.blob as blob
 import os
 import json
 from datetime import datetime as dt

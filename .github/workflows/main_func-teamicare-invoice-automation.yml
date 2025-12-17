@@ -24,26 +24,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # - name: Setup Python version
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version: ${{ env.PYTHON_VERSION }}
+      - name: Setup Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Create and start virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
 
-      # - name: Install dependencies
-      #   run: pip install --target="./.python_packages/lib/site-packages" -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       # Optional: Add step to run tests here
 
       - name: Zip artifact for deployment
-        run: zip -r release.zip . -x ".git/*" ".github/*" "venv/*" "__pycache__/*" "local.settings.json" "release.zip"
+        run: zip release.zip ./* -r
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: release.zip
-
+          path: |
+            release.zip
+            !venv/
 
   deploy:
     runs-on: ubuntu-latest
@@ -75,8 +80,5 @@ jobs:
         id: deploy-to-function
         with:
           app-name: 'func-teamicare-invoice-automation'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           sku: 'flexconsumption'
-          # Force Azure to install dependencies from requirements.txt
-          scm-do-build-during-deployment: true
-          
+          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}

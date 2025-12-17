@@ -466,13 +466,14 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
         logging.error("MYOB Access token is invalid, cannot proceed with data operations.")
         return {'error': 'Invalid MYOB access token'}
     # if inputblobpage is None or empty or cannot be parsed to a date time in the format of 'YYYY-MM-DDTHH:MM:SSZ', use EARLIEST_MODIFIED_DATE
-    blobinput = inputblobpage.strip()
-    if not blobinput:
+    if inputblobpage == '' or inputblobpage is None:
         blobinput = EARLIEST_MODIFIED_DATE
-    try:
-        dt.strptime(blobinput, '%Y-%m-%dT%H:%M:%SZ')
-    except ValueError:
-        blobinput = EARLIEST_MODIFIED_DATE
+    else:
+        try:
+            blobinput = inputblobpage.strip()
+            dt.strptime(blobinput, '%Y-%m-%dT%H:%M:%SZ')
+        except ValueError:
+            blobinput = EARLIEST_MODIFIED_DATE
     # now call the myob_api_modules.get_customer_payments_after_date_and_convert_to_invoice 
     after_date = dt.strptime(blobinput, '%Y-%m-%dT%H:%M:%SZ')
     resp = myob_api_modules.get_customer_payments_after_date_and_convert_to_invoice_key(

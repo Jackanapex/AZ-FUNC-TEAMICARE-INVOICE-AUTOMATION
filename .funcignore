@@ -6,7 +6,6 @@ __queuestorage__
 local.settings.json
 tests
 test
-.venv
 __pycache__
 *.pyc
 *.pyo

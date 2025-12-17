@@ -80,6 +80,6 @@ jobs:
         id: deploy-to-function
         with:
           app-name: 'func-teamicare-invoice-automation'
-          slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+          sku: 'flexconsumption'
           

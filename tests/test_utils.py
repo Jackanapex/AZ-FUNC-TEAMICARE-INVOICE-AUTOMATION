@@ -186,9 +186,7 @@ class MockIn():
 class MockBlobClient():
     def __init__(self, body:str):
         self.body = body.encode('utf-8')
-    def download_blob(self):
-        return self
-    def readall(self):
+    def read(self):
         return self.body
 
 def _save_json_result_to_local_csv_file(result, filename:str, sample_rows:int=3):

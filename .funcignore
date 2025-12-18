@@ -28,6 +28,7 @@ venv/
 .venv/
 env/
 .venv2/
+.venv3/
 
 # Local Function Settings (SECURITY CRITICAL)
 # Prevents accidentally deploying secrets to the cloud

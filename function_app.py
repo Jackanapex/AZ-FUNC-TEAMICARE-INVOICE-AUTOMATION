@@ -7,7 +7,7 @@ from datetime import datetime as dt
 from datetime import timedelta
 
 # from this_app_module import splose_api_modules
-# from this_app_module import myob_api_modules
+from this_app_module import myob_api_modules
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 

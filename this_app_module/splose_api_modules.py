@@ -4,13 +4,13 @@ import logging
 import pandas as pd
 import numpy as np
 
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+# from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(5),
-    retry=retry_if_exception_type(Exception)
-)
+# @retry(
+#     stop=stop_after_attempt(3),
+#     wait=wait_fixed(5),
+#     retry=retry_if_exception_type(Exception)
+# )
 def list_objects_from_splose(base_url: str, this_url: str, secret: str, accumulated_object_list = [], params = None) -> requests.Response:
     """
     Query data from the Splose API endpoint.
@@ -36,11 +36,11 @@ def list_objects_from_splose(base_url: str, this_url: str, secret: str, accumula
     else:
         return list_objects_from_splose(base_url, next_page_links['nextPage'], secret, accumulated_object_list)
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(5),
-    retry=retry_if_exception_type(Exception)
-)
+# @retry(
+#     stop=stop_after_attempt(3),
+#     wait=wait_fixed(5),
+#     retry=retry_if_exception_type(Exception)
+# )
 def get_one_object_from_splose(base_url: str, this_url: str, secret: str, object_id: int) -> requests.Response:
     """
     Query data from the Splose API endpoint for a single object.
@@ -52,11 +52,11 @@ def get_one_object_from_splose(base_url: str, this_url: str, secret: str, object
     response = requests.get(f"{base_url}{this_url}/{object_id}", headers=header_with_bearer_token_auth)
     return response
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(5),
-    retry=retry_if_exception_type(Exception)
-)
+# @retry(
+#     stop=stop_after_attempt(3),
+#     wait=wait_fixed(5),
+#     retry=retry_if_exception_type(Exception)
+# )
 def create_one_object_in_splose(base_url: str, this_url: str, secret: str, object_data: dict) -> requests.Response:
     """
     Create a new object in Splose via the API endpoint.

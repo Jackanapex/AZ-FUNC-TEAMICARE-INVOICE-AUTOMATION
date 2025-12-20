@@ -11,21 +11,6 @@ from this_app_module import myob_api_modules
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
-@app.function_name(name="func_a_simple_one")
-@app.route(route="func_a_simple_one", methods=["GET"])
-def func_a_simple_one(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info("func_a_simple_one called.")
-    return func.HttpResponse("Hello from func_a_simple_one!", status_code=200)
-
-# @app.blob_input(arg_name="inputblob",
-#                 path="teamicare/myob_authorize/refresh_token",
-#                 connection="AzureWebJobsStorage")
-# @app.blob_output(arg_name="outputblobAccessToken",
-#                 path="teamicare/myob_authorize/access_token",
-#                 connection="AzureWebJobsStorage")
-# @app.blob_output(arg_name="outputblobRefreshToken",
-#                 path="teamicare/myob_authorize/refresh_token",
-#                 connection="AzureWebJobsStorage")
 def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str]) -> dict:
     logging.info("Starting MYOB authorization process...")
     try:
@@ -105,18 +90,6 @@ def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: fun
 
 # The following function gets MYOB company info using the access token stored in blob storage
 # can be used by all actual data operation functions to check and re-authenticate if needed
-# @app.blob_input(arg_name="inputblobAccessToken",
-#                 path="teamicare/myob_authorize/access_token",
-#                 connection="AzureWebJobsStorage")
-# @app.blob_input(arg_name="inputblobRefreshToken",
-#                 path="teamicare/myob_authorize/refresh_token",
-#                 connection="AzureWebJobsStorage")
-# @app.blob_output(arg_name="outputblobAccessToken",
-#                 path="teamicare/myob_authorize/access_token",
-#                 connection="AzureWebJobsStorage")
-# @app.blob_output(arg_name="outputblobRefreshToken",
-#                 path="teamicare/myob_authorize/refresh_token",
-#                 connection="AzureWebJobsStorage")
 def func_myob_get_company_info(
         inputblobAccessToken: str, 
         inputblobRefreshToken: str, 
@@ -256,10 +229,15 @@ def func_filter_splose_invoice_for_myob_import(
         pending_invoice_number_list = pending_invoice_number_list[:20] + pending_invoice_number_list[-20:]    
     # now check each invoice number in MYOB if it exists, if not, add to
     invoice_id_to_import_list = []
+    all_myob_invoices = myob_api_modules.recursively_get_all_item_invoices(
+        access_token=company_info_result['_auth_info'].get('access_token', ''),
+        business_id=inputblobBusinessId
+    )
     for invoice_number in pending_invoice_number_list:
         if not myob_api_modules.is_sale_invoice_service_existing_in_myob(
-            company_info_result['_auth_info'].get('access_token', ''), inputblobBusinessId, 
-            splose_invoice_number=invoice_number[1]):
+            splose_invoice_number=invoice_number[1],
+            myob_invoice_list=all_myob_invoices
+        ):
             invoice_id_to_import_list.append(int(invoice_number[0]))
     pending_invoices = splose_api_modules.filter_for_invoices(
         invoice_list = _,

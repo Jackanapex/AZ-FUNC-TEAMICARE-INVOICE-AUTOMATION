@@ -218,6 +218,18 @@ def test_func_update_splose_invoices_with_payment_gaps(entry):
         isinstance(json.loads(outputblobSploseInvoicesWithPayments.val), list)
     )
 
+def test_recursively_get_all_item_invoices(entry):
+    ''' This shows how test case works. '''
+    access_token = os.environ.get("myob_pytest_access_token","")
+    business_id = os.environ.get("myob_pytest_business_id","")
+    resp = entry.myob_api_modules.recursively_get_all_item_invoices(access_token, business_id)
+    assert(
+        isinstance(resp, list)
+    )
+    assert(
+        len(resp) > 0
+    )
+
 def test_get_contact_customer(entry):
     ''' This shows how test case works. '''
     access_token = os.environ.get("myob_pytest_access_token","")
@@ -349,10 +361,15 @@ def test_filter_splose_invoice_for_myob_import(entry):
     _ = entry.splose_api_modules.get_all_awaiting_payment_invoices(splose_patient_to_contact_mapping)
     pending_invoice_number_list = [[str(i['id']), str(i['invoiceNumber'])] for i in _]
     invoice_id_to_import_list = []
+    all_myob_invoices = entry.myob_api_modules.recursively_get_all_item_invoices(
+        access_token=os.environ.get('myob_pytest_access_token',''),
+        business_id=os.environ.get('myob_pytest_business_id','')
+    )
     for invoice_number in pending_invoice_number_list:
         if not entry.myob_api_modules.is_sale_invoice_service_existing_in_myob(
-            os.environ.get('myob_pytest_access_token',''), os.environ.get('myob_pytest_business_id',''), 
-            splose_invoice_number=invoice_number[1]):
+            splose_invoice_number=invoice_number[1],
+            myob_invoice_list=all_myob_invoices
+        ):
             invoice_id_to_import_list.append(int(invoice_number[0]))
     pending_invoices = entry.splose_api_modules.filter_for_invoices(
         invoice_list = _,

@@ -117,6 +117,11 @@ def get_sale_invoice_service(access_token: str, business_id:str, number: str) ->
     logging.info(f"Response text: {response.text}")
     return response.json()
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    retry=retry_if_exception_type(Exception)
+)
 def recursively_get_customer_payments_after_date(access_token: str, business_id: str, after_date: datetime) -> list:
     """
     Recursively get the customer payments after a specific date using the access token.
@@ -137,7 +142,7 @@ def recursively_get_customer_payments_after_date(access_token: str, business_id:
     payments = response.json()
     all_payments = payments.get("Items", [])
     # check if there is a next link
-    next_link = payments.get("NextLink")
+    next_link = payments.get("NextPageLink")
     while next_link:
         logging.info(f"Getting next page of customer payments from URL: {next_link}")
         response = requests.request("GET", next_link, headers=headers, data=payload)
@@ -148,8 +153,44 @@ def recursively_get_customer_payments_after_date(access_token: str, business_id:
         logging.info(f"Response text: {response.text}")
         payments = response.json()
         all_payments.extend(payments.get("Items", []))
-        next_link = payments.get("NextLink")
+        next_link = payments.get("NextPageLink")
     return all_payments
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    retry=retry_if_exception_type(Exception)
+)
+def recursively_get_all_item_invoices(access_token: str, business_id: str) -> list:
+    """
+    Recursively get all item invoices using the access token.
+    """
+    url = f"{os.environ.get('myob_api_url','')}/{business_id}/Sale/Invoice/Item"
+    logging.info(f"Getting all item invoices from URL: {url}")
+    payload = {}
+    headers = compose_request_headers(access_token)
+    response = requests.request("GET", url, headers=headers, data=payload)
+    logging.info(f"Response status code: {response.status_code}")
+    if response.status_code != 200:
+        logging.error(f"Error getting item invoices: {response.text}")
+        response.raise_for_status()
+    logging.info(f"Response text: {response.text}")
+    invoices = response.json()
+    all_invoices = invoices.get("Items", [])
+    # check if there is a next link
+    next_link = invoices.get("NextPageLink")
+    while next_link:
+        logging.info(f"Getting next page of item invoices from URL: {next_link}")
+        response = requests.request("GET", next_link, headers=headers, data=payload)
+        logging.info(f"Response status code: {response.status_code}")
+        if response.status_code != 200:
+            logging.error(f"Error getting item invoices: {response.text}")
+            response.raise_for_status()
+        logging.info(f"Response text: {response.text}")
+        invoices = response.json()
+        all_invoices.extend(invoices.get("Items", []))
+        next_link = invoices.get("NextPageLink")
+    return all_invoices
 
 def get_customer_payments_after_date_and_convert_to_invoice_key(access_token: str, business_id: str, after_date: datetime) -> dict:
     """
@@ -178,23 +219,11 @@ def get_customer_payments_after_date_and_convert_to_invoice_key(access_token: st
     wait=wait_fixed(8),
     retry=retry_if_exception_type(Exception)
 )
-def is_sale_invoice_service_existing_in_myob(access_token: str, business_id:str, splose_invoice_number: str) -> bool:
+def is_sale_invoice_service_existing_in_myob(splose_invoice_number: str, myob_invoice_list: list) -> bool:
     """
     Check if a sale invoice service exists in MYOB using the access token.
     """
-    url = f"{os.environ.get('myob_api_url','')}/{business_id}/Sale/Invoice/Item?$filter=Number eq '{splose_invoice_number}'"
-    logging.info(f"Checking sale invoice service existence from URL: {url}")
-    payload = {}
-    headers = compose_request_headers(access_token)
-    response = requests.request("GET", url, headers=headers, data=payload)
-    logging.info(f"Response status code: {response.status_code}")
-    if response.status_code != 200:
-        logging.error(f"Error checking sale invoice service existence: {response.text}")
-        response.raise_for_status()
-    logging.info(f"Response text: {response.text}")
-    invoices = response.json()
-    items = invoices.get("Items", [])
-    return len(items) > 0
+    return any(invoice.get("Number") == splose_invoice_number for invoice in myob_invoice_list)
 
 def post_contact_customer(access_token: str, business_id:str, customer_data: dict) -> bool:
     """

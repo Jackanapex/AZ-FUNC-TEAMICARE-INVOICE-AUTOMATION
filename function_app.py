@@ -8,8 +8,11 @@ from datetime import timedelta
 
 from this_app_module import splose_api_modules
 from this_app_module import myob_api_modules
+from this_app_module import azure_util_modules
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
+
+################################ Helper functions - TODO move to azure_util_modules ###############################
 
 def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str]) -> dict:
     logging.info("Starting MYOB authorization process...")
@@ -42,51 +45,6 @@ def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], ou
         logging.info(f"New access token: {refreshed_result.get('access_token', '')}")
         logging.info(f"New refresh token: {refreshed_result.get('refresh_token', '')}")
         return refreshed_result
-
-@app.function_name(name="func_get_new_refresh_token")
-@app.route(route="func_get_new_refresh_token", methods=["GET"])
-@app.blob_output(arg_name="outputblobAccessToken",
-                path="teamicare/myob-authorize/access_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobRefreshToken",
-                path="teamicare/myob-authorize/refresh_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobBusinessId",
-                path="teamicare/myob-authorize/business_id",
-                connection="AzureWebJobsStorage")
-def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str], outputblobBusinessId: func.Out[str]) -> func.HttpResponse:
-    # TO-DO: this function gets triggered by an HTTP GET and saves the code parameter to blob storage
-    logging.info("func_get_new_refresh_token called.")
-    # get the parameter 'code' and 'businessId' from the query string
-    try:
-        code = req.params['code']
-        business_id = req.params['businessId']
-    except KeyError:
-        logging.error("No 'code' or 'businessId' parameter found in the request.")
-        return func.HttpResponse(f"No 'code' or 'businessId' parameter found in the request.", status_code=400)
-    # use the code to call the get_access_token function
-    try:
-        access_token_result = myob_api_modules.get_access_token(
-            os.environ["myob_authorize_url"],
-            os.environ["myob_client_id"],
-            os.environ["myob_client_secret"],
-            code,
-            os.environ["myob_redirect_uri"],
-            os.environ["myob_invoice_scope"]
-        )
-    except Exception as e:
-        logging.error(f"Failed to get MYOB access token using authorization code: {e}")
-        return func.HttpResponse(f"Failed to get MYOB access token using authorization code: {e}", status_code=500)
-    else:
-        # if successful, save the access_token and refresh_token to blob storage
-        outputblobAccessToken.set(access_token_result.get('access_token', ''))
-        outputblobRefreshToken.set(access_token_result.get('refresh_token', ''))
-        outputblobBusinessId.set(business_id)
-        logging.info("MYOB access token and refresh token have been updated successfully.")
-        logging.info(f"New access token: {access_token_result.get('access_token', '')}")
-        logging.info(f"New refresh token: {access_token_result.get('refresh_token', '')}")
-        logging.info(f"New business ID: {business_id}")
-    return access_token_result
 
 # The following function gets MYOB company info using the access token stored in blob storage
 # can be used by all actual data operation functions to check and re-authenticate if needed
@@ -132,6 +90,53 @@ def func_myob_get_company_info(
             'refresh_token': inputblobRefreshToken
         }
     return company_info_result
+
+################################ Actual functions defined below ###############################
+
+@app.function_name(name="func_get_new_refresh_token")
+@app.route(route="func_get_new_refresh_token", methods=["GET"])
+@app.blob_output(arg_name="outputblobAccessToken",
+                path="teamicare/myob-authorize/access_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobRefreshToken",
+                path="teamicare/myob-authorize/refresh_token",
+                connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobBusinessId",
+                path="teamicare/myob-authorize/business_id",
+                connection="AzureWebJobsStorage")
+def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str], outputblobBusinessId: func.Out[str]) -> func.HttpResponse:
+    # TO-DO: this function gets triggered by an HTTP GET and saves the code parameter to blob storage
+    logging.info("func_get_new_refresh_token called.")
+    # get the parameter 'code' and 'businessId' from the query string
+    try:
+        code = req.params['code']
+        business_id = req.params['businessId']
+    except KeyError:
+        logging.error("No 'code' or 'businessId' parameter found in the request.")
+        return func.HttpResponse(f"No 'code' or 'businessId' parameter found in the request.", status_code=400)
+    # use the code to call the get_access_token function
+    try:
+        access_token_result = myob_api_modules.get_access_token(
+            os.environ["myob_authorize_url"],
+            os.environ["myob_client_id"],
+            os.environ["myob_client_secret"],
+            code,
+            os.environ["myob_redirect_uri"],
+            os.environ["myob_invoice_scope"]
+        )
+    except Exception as e:
+        logging.error(f"Failed to get MYOB access token using authorization code: {e}")
+        return func.HttpResponse(f"Failed to get MYOB access token using authorization code: {e}", status_code=500)
+    else:
+        # if successful, save the access_token and refresh_token to blob storage
+        outputblobAccessToken.set(access_token_result.get('access_token', ''))
+        outputblobRefreshToken.set(access_token_result.get('refresh_token', ''))
+        outputblobBusinessId.set(business_id)
+        logging.info("MYOB access token and refresh token have been updated successfully.")
+        logging.info(f"New access token: {access_token_result.get('access_token', '')}")
+        logging.info(f"New refresh token: {access_token_result.get('refresh_token', '')}")
+        logging.info(f"New business ID: {business_id}")
+    return access_token_result
 
 # TO-DO: build actual MYOB data functions
 # always call func_myob_get_company_info above and check if return is a dict and has the 'Build' key
@@ -193,17 +198,13 @@ def func_myob_data_operation_example(
 @app.blob_output(arg_name="outputblobRefreshToken",
                 path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobSploseInvoices",
-                path="teamicare/splose-outbound/splose_invoices_to_myob_import_{DateTime}.json",
-                connection="AzureWebJobsStorage")
 def func_filter_splose_invoice_for_myob_import(
     myTimer: func.TimerRequest,
     inputblobBusinessId: str,
     inputblobAccessToken: str, 
     inputblobRefreshToken: str, 
     outputblobAccessToken: func.Out[str], 
-    outputblobRefreshToken: func.Out[str],
-    outputblobSploseInvoices: func.Out[str]
+    outputblobRefreshToken: func.Out[str]
 ):
     if myTimer.past_due:
         logging.info('The timer is past due!')
@@ -245,7 +246,11 @@ def func_filter_splose_invoice_for_myob_import(
     )
     # set the pending invoices to save into blob outputblobSploseInvoices as a pretty formatted json file for loading to another function later
     result_json_str = json.dumps(pending_invoices, ensure_ascii=False, indent=4)
-    outputblobSploseInvoices.set(result_json_str)
+    azure_util_modules.save_content_to_blob(
+        result_json_str, 
+        f"splose-outbound/splose_invoices_to_myob_import_{dt.now().strftime('%Y%m%dT%H%M%S')}.json", 
+        "teamicare"
+    )
 
 @app.function_name(name="func_convert_splose_invoices_to_myob_customers")
 @app.blob_trigger(arg_name="client",
@@ -270,9 +275,6 @@ def func_filter_splose_invoice_for_myob_import(
 @app.blob_output(arg_name="outputblobMyobUpsertedCustomers",
                 path="teamicare/myob-customer-outbound/myob_upserted_customers.json",
                 connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobMyobNewInvoices",
-                path="teamicare/myob-invoice-outbound/myob_new_invoices_{DateTime}.json",
-                connection="AzureWebJobsStorage")
 def func_convert_splose_invoices_to_myob_customers(
     client: func.InputStream,
     inputblobBusinessId: str,
@@ -280,8 +282,7 @@ def func_convert_splose_invoices_to_myob_customers(
     inputblobRefreshToken: str, 
     outputblobAccessToken: func.Out[str], 
     outputblobRefreshToken: func.Out[str],
-    outputblobMyobUpsertedCustomers: func.Out[str],
-    outputblobMyobNewInvoices: func.Out[str]
+    outputblobMyobUpsertedCustomers: func.Out[str]
 ):
     # load the new file content from the blob client
     new_file_content = client.read().decode('utf-8')
@@ -317,7 +318,11 @@ def func_convert_splose_invoices_to_myob_customers(
     result_json_str = json.dumps(result_dict, ensure_ascii=False, indent=4)
     outputblobMyobUpsertedCustomers.set(result_json_str)
     # set new_file_content to outputblobMyobNewInvoices for the next function to use
-    outputblobMyobNewInvoices.set(new_file_content)
+    azure_util_modules.save_content_to_blob(
+        new_file_content,
+        f"myob-invoice-outbound/myob_new_invoices_{dt.now().strftime('%Y%m%dT%H%M%S')}.json",
+        "teamicare"
+    )
 
 @app.function_name(name="func_import_splose_invoices_to_myob")
 @app.blob_trigger(arg_name="client",
@@ -417,9 +422,6 @@ def func_import_splose_invoices_to_myob(
 @app.blob_output(arg_name="outputblobRefreshToken",
                 path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobMyobNewPayments",
-                path="teamicare/myob-payment-outbound/myob_new_payments_{DateTime}.json",
-                connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobpage",
                 path="teamicare/myob-payment-inbound/myob_payment_from.txt",
                 connection="AzureWebJobsStorage")
@@ -431,8 +433,7 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
     inputblobRefreshToken: str,
     outputblobpage: func.Out[str],
     outputblobAccessToken: func.Out[str], 
-    outputblobRefreshToken: func.Out[str],
-    outputblobMyobNewPayments: func.Out[str]
+    outputblobRefreshToken: func.Out[str]
 ):
     EARLIEST_MODIFIED_DATE = '2000-01-01T00:00:00Z'
     DELTA_DAYS_FOR_NEXT_RUN = 90
@@ -470,7 +471,11 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
     assert(isinstance(resp, dict))
     # set the resp dict to save into blob outputblobMyobNewPayments as a pretty formatted json file for loading to another function later
     result_json_str = json.dumps(resp, ensure_ascii=False, indent=4)
-    outputblobMyobNewPayments.set(result_json_str)
+    azure_util_modules.save_content_to_blob(
+        result_json_str,
+        f"myob-payment-outbound/myob_new_payments_{dt.now().strftime('%Y%m%dT%H%M%S')}.json",
+        "teamicare"
+    )
     # update the outputblobpage to the current date time minus 90 days
     new_after_date = dt.now() - timedelta(days=DELTA_DAYS_FOR_NEXT_RUN)
     outputblobpage.set(dt.strftime(new_after_date,'%Y-%m-%dT%H:%M:%SZ'))

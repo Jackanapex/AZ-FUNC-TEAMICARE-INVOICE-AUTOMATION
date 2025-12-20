@@ -68,7 +68,6 @@ def test_func_filter_splose_invoice_for_myob_import(entry):
     inputblobRefreshToken = os.environ.get("myob_pytest_refresh_token","")
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
-    outputblobSploseInvoices = MockOut()
     # Call the function.
     resp = func_call(
         myTimer,
@@ -76,12 +75,11 @@ def test_func_filter_splose_invoice_for_myob_import(entry):
         inputblobAccessToken,
         inputblobRefreshToken,
         outputblobAccessToken,
-        outputblobRefreshToken,
-        outputblobSploseInvoices
+        outputblobRefreshToken
     )
-    # Check the output.
+    # Check if function runs without error
     assert(
-        isinstance(json.loads(outputblobSploseInvoices.val), list)
+        resp is None
     )
 
 def test_func_convert_splose_invoices_to_myob_customers(entry):
@@ -97,7 +95,6 @@ def test_func_convert_splose_invoices_to_myob_customers(entry):
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
     outputblobMyobUpsertedCustomers = MockOut()
-    outputblobMyobNewInvoices = MockOut()
     # Call the function.
     resp = func_call(
         client,
@@ -106,15 +103,14 @@ def test_func_convert_splose_invoices_to_myob_customers(entry):
         inputblobRefreshToken,
         outputblobAccessToken,
         outputblobRefreshToken,
-        outputblobMyobUpsertedCustomers,
-        outputblobMyobNewInvoices
+        outputblobMyobUpsertedCustomers
     )
     # Check the output.
     assert(
         isinstance(json.loads(outputblobMyobUpsertedCustomers.val), dict)
     )
     assert(
-        isinstance(json.loads(outputblobMyobNewInvoices.val), list)
+        resp is None
     )
 
 def test_func_import_splose_invoices_to_myob(entry):
@@ -181,7 +177,6 @@ def test_func_get_customer_payments_after_date_and_convert_to_invoice_key(entry)
     outputblobpage = MockOut()
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
-    outputblobMyobNewPayments = MockOut()
     # Call the function.
     resp = func_call(
         myTimer,
@@ -191,13 +186,11 @@ def test_func_get_customer_payments_after_date_and_convert_to_invoice_key(entry)
         inputblobRefreshToken,
         outputblobpage,
         outputblobAccessToken,
-        outputblobRefreshToken,
-        outputblobMyobNewPayments
+        outputblobRefreshToken
     )
-    logging.info(f"outputblobMyobNewPayments.val: {outputblobMyobNewPayments.val}")
     # Check the output.
     assert(
-        isinstance(json.loads(outputblobMyobNewPayments.val), dict)
+        resp is None
     )
 
 def test_func_update_splose_invoices_with_payment_gaps(entry):

@@ -33,11 +33,9 @@ def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], ou
             os.environ["myob_redirect_uri"],
             os.environ["myob_invoice_scope"]
         )
-        logging.info(f"Please visit the following URL to get the authorization code: {access_code_url}")
-        #TO-DO: send an email with the URL generated above
         msgout.set(f"Please visit the following URL to log into MYOB again: {access_code_url}. If unsure about this please contact jack.w@letsportal.com.au.")
-        #Now stop this process because the log-in confirmation is done manually
-        return
+        logging.info(f"sent to queue - Please visit the following URL to get the authorization code: {access_code_url}")
+        raise e
     else:
         # if refresh is successful, save the access_token and refresh_token to blob storage
         outputblobAccessToken.set(refreshed_result.get('access_token', ''))
@@ -45,7 +43,7 @@ def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], ou
         logging.info("MYOB access token and refresh token have been updated successfully.")
         logging.info(f"New access token: {refreshed_result.get('access_token', '')}")
         logging.info(f"New refresh token: {refreshed_result.get('refresh_token', '')}")
-        return refreshed_result
+    return refreshed_result
 
 # The following function gets MYOB company info using the access token stored in blob storage
 # can be used by all actual data operation functions to check and re-authenticate if needed
@@ -72,7 +70,7 @@ def func_myob_get_company_info(
             )
         except Exception as e:
             logging.error(f"Failed to refresh MYOB access token: {e}")
-            return
+            raise e
         else:
             # if refresh is successful, retry get_company_info with new access token
             try:
@@ -81,7 +79,7 @@ def func_myob_get_company_info(
                 )
             except Exception as e:
                 logging.error(f"Failed to get MYOB company info after refreshing access token: {e}")
-                return
+                raise e
             else:
                 logging.info(f"MYOB company info retrieved successfully after refreshing access token: {company_info_result}")
                 company_info_result['_auth_info'] = refreshed_result

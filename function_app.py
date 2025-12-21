@@ -70,7 +70,7 @@ def func_myob_get_company_info(
             )
         except Exception as e:
             logging.error(f"Failed to refresh MYOB access token: {e}")
-            raise e
+            return {}
         else:
             # if refresh is successful, retry get_company_info with new access token
             try:

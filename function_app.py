@@ -94,7 +94,7 @@ def func_myob_get_company_info(
 ################################ Actual functions defined below ###############################
 
 @app.function_name(name="func_get_new_refresh_token")
-@app.route(route="func_get_new_refresh_token", methods=["GET"])
+@app.route(route="func_get_new_refresh_token", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 @app.blob_output(arg_name="outputblobAccessToken",
                 path="teamicare/myob-authorize/access_token",
                 connection="AzureWebJobsStorage")

@@ -1,4 +1,5 @@
 from azure.storage.blob import BlobServiceClient, StandardBlobTier
+from azure.storage.queue import QueueClient, TextBase64EncodePolicy
 import logging
 import os
 import azure.functions as func
@@ -46,3 +47,28 @@ def save_content_to_blob(file_content: str, file_name: str, container_name: str)
     except Exception as e:
         logging.error(f"Failed to upload blob: {e}")
         return func.HttpResponse(f"Error: {e}", status_code=500)
+
+def send_message_to_queue(message: str, queue_name: str) -> None:
+    if os.environ.get("is_local_dev", "false").lower() == "true":
+        logging.info("Using actual connection string copied from prod environment.")
+        connect_str = "DefaultEndpointsProtocol=https;AccountName=stteamicare;AccountKey=wXAReKvO0ViadYNjg7+rHHfLXkCh0ISEST7oOwiJtovMZWdKfv7UTAcHVkgI22+uWJlqSiyej04++AStrAiPGQ==;EndpointSuffix=core.windows.net"
+    else:
+        logging.info("Using connection string from App Setting.")
+        connect_str = os.environ["AzureWebJobsStorage"]
+# 1. Instantiate the QueueClient with the Base64 encoding policy
+    # The 'message_encode_policy' argument tells the client to convert 
+    # your string to Base64 before sending it to Azure.
+    queue_client = QueueClient.from_connection_string(
+        conn_str=connect_str,
+        queue_name=queue_name,
+        message_encode_policy=TextBase64EncodePolicy()
+    )
+
+    try:
+        # 3. Send the message
+        # The SDK will convert this text to 'VGhpcyBtZXNzYWdlIHdpbGwgYmUgYXV0b21hdGljYWxseSBCYXNlNjQgZW5jb2RlZA=='
+        queue_client.send_message(message)
+        print(f"Successfully sent message to queue: {queue_name}")
+        
+    except Exception as e:
+        print(f"Error sending message: {e}")

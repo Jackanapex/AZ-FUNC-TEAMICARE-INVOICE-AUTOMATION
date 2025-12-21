@@ -33,7 +33,11 @@ def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], ou
             os.environ["myob_redirect_uri"],
             os.environ["myob_invoice_scope"]
         )
-        msgout.set(f"Please visit the following URL to log into MYOB again: {access_code_url}. If unsure about this please contact jack.w@letsportal.com.au.")
+        # msgout.set(f"Please visit the following URL to log into MYOB again: {access_code_url}. If unsure about this please contact jack.w@letsportal.com.au.")
+        azure_util_modules.send_message_to_queue(
+            f"Please visit the following URL to log into MYOB again: <a href=\"{access_code_url}\">{access_code_url}</a>. If unsure about this please contact jack.w@letsportal.com.au.",
+            "myob-auth-notifications"
+        )
         logging.info(f"sent to queue - Please visit the following URL to get the authorization code: {access_code_url}")
         raise e
     else:

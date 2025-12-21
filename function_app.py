@@ -14,7 +14,7 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 ################################ Helper functions - TODO move to azure_util_modules ###############################
 
-def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str]) -> dict:
+def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], outputblobRefreshToken: func.Out[str], msgout: func.Out[str]) -> dict:
     logging.info("Starting MYOB authorization process...")
     try:
         refreshed_result = myob_api_modules.refresh_access_token(
@@ -35,6 +35,7 @@ def func_myob_authorize(inputblob: str, outputblobAccessToken: func.Out[str], ou
         )
         logging.info(f"Please visit the following URL to get the authorization code: {access_code_url}")
         #TO-DO: send an email with the URL generated above
+        msgout.set(f"Please visit the following URL to log into MYOB again: {access_code_url}. If unsure about this please contact jack.w@letsportal.com.au.")
         #Now stop this process because the log-in confirmation is done manually
         return
     else:
@@ -52,7 +53,8 @@ def func_myob_get_company_info(
         inputblobAccessToken: str, 
         inputblobRefreshToken: str, 
         outputblobAccessToken: func.Out[str], 
-        outputblobRefreshToken: func.Out[str]
+        outputblobRefreshToken: func.Out[str],
+        msgout: func.Out[str]
     ) -> dict:
     # all these operations need to call get_company_info first
     logging.info("Starting MYOB get company info process...")
@@ -65,7 +67,8 @@ def func_myob_get_company_info(
             refreshed_result = func_myob_authorize(
                 inputblobRefreshToken,
                 outputblobAccessToken,
-                outputblobRefreshToken
+                outputblobRefreshToken,
+                msgout
             )
         except Exception as e:
             logging.error(f"Failed to refresh MYOB access token: {e}")
@@ -136,7 +139,7 @@ def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: fun
         logging.info(f"New access token: {access_token_result.get('access_token', '')}")
         logging.info(f"New refresh token: {access_token_result.get('refresh_token', '')}")
         logging.info(f"New business ID: {business_id}")
-    return access_token_result
+    return func.HttpResponse(f"MYOB access token and refresh token have been updated successfully.You can close this window.", status_code=200)
 
 # TO-DO: build actual MYOB data functions
 # always call func_myob_get_company_info above and check if return is a dict and has the 'Build' key
@@ -157,19 +160,24 @@ def func_get_new_refresh_token(req: func.HttpRequest, outputblobAccessToken: fun
 # @app.blob_output(arg_name="outputblobRefreshToken",
 #                 path="teamicare/myob_authorize/refresh_token",
 #                 connection="AzureWebJobsStorage")
+# @app.queue_output(arg_name="msgout", 
+#                   queue_name="myob-auth-notifications", 
+#                   connection="AzureWebJobsStorage")
 def func_myob_data_operation_example(
         inputblobBusinessId: str,
         inputblobAccessToken: str, 
         inputblobRefreshToken: str, 
         outputblobAccessToken: func.Out[str], 
-        outputblobRefreshToken: func.Out[str]
+        outputblobRefreshToken: func.Out[str],
+        msgout: func.Out[str]
     ) -> dict:
     # call func_myob_get_company_info first to ensure access token is valid
     company_info_result = func_myob_get_company_info(
         inputblobAccessToken,
         inputblobRefreshToken,
         outputblobAccessToken,
-        outputblobRefreshToken
+        outputblobRefreshToken,
+        msgout
     )
     # if company_info_result is a dict and has the 'Build' key, proceed with actual data operations
     if isinstance(company_info_result, dict) and 'Build' in company_info_result:
@@ -198,13 +206,17 @@ def func_myob_data_operation_example(
 @app.blob_output(arg_name="outputblobRefreshToken",
                 path="teamicare/myob-authorize/refresh_token",
                 connection="AzureWebJobsStorage")
+@app.queue_output(arg_name="msgout", 
+                  queue_name="myob-auth-notifications", 
+                  connection="AzureWebJobsStorage")
 def func_filter_splose_invoice_for_myob_import(
     myTimer: func.TimerRequest,
     inputblobBusinessId: str,
     inputblobAccessToken: str, 
     inputblobRefreshToken: str, 
     outputblobAccessToken: func.Out[str], 
-    outputblobRefreshToken: func.Out[str]
+    outputblobRefreshToken: func.Out[str],
+    msgout: func.Out[str]
 ):
     if myTimer.past_due:
         logging.info('The timer is past due!')
@@ -213,7 +225,8 @@ def func_filter_splose_invoice_for_myob_import(
         inputblobAccessToken,
         inputblobRefreshToken,
         outputblobAccessToken,
-        outputblobRefreshToken
+        outputblobRefreshToken,
+        msgout
     )
     # if company_info_result is a dict and has the 'Build' key, proceed with actual data operations
     if isinstance(company_info_result, dict) and 'Build' in company_info_result:
@@ -275,6 +288,9 @@ def func_filter_splose_invoice_for_myob_import(
 @app.blob_output(arg_name="outputblobMyobUpsertedCustomers",
                 path="teamicare/myob-customer-outbound/myob_upserted_customers.json",
                 connection="AzureWebJobsStorage")
+@app.queue_output(arg_name="msgout", 
+                  queue_name="myob-auth-notifications", 
+                  connection="AzureWebJobsStorage")
 def func_convert_splose_invoices_to_myob_customers(
     client: func.InputStream,
     inputblobBusinessId: str,
@@ -282,7 +298,8 @@ def func_convert_splose_invoices_to_myob_customers(
     inputblobRefreshToken: str, 
     outputblobAccessToken: func.Out[str], 
     outputblobRefreshToken: func.Out[str],
-    outputblobMyobUpsertedCustomers: func.Out[str]
+    outputblobMyobUpsertedCustomers: func.Out[str],
+    msgout: func.Out[str]
 ):
     # load the new file content from the blob client
     new_file_content = client.read().decode('utf-8')
@@ -292,7 +309,8 @@ def func_convert_splose_invoices_to_myob_customers(
         inputblobAccessToken,
         inputblobRefreshToken,
         outputblobAccessToken,
-        outputblobRefreshToken
+        outputblobRefreshToken,
+        msgout
     )
     # if company_info_result is a dict and has the 'Build' key, proceed with actual data operations
     if isinstance(company_info_result, dict) and 'Build' in company_info_result:
@@ -350,6 +368,9 @@ def func_convert_splose_invoices_to_myob_customers(
 @app.blob_output(arg_name="outputblobMyobNewInvoices",
                 path="teamicare/myob-invoice-inbound/myob_new_invoices_imported_{DateTime}.json",
                 connection="AzureWebJobsStorage")
+@app.queue_output(arg_name="msgout", 
+                  queue_name="myob-auth-notifications", 
+                  connection="AzureWebJobsStorage")
 def func_import_splose_invoices_to_myob(
     client: func.InputStream,
     inputblobMyobUpsertedCustomers: str,
@@ -358,7 +379,8 @@ def func_import_splose_invoices_to_myob(
     inputblobRefreshToken: str, 
     outputblobAccessToken: func.Out[str], 
     outputblobRefreshToken: func.Out[str],
-    outputblobMyobNewInvoices: func.Out[str]
+    outputblobMyobNewInvoices: func.Out[str],
+    msgout: func.Out[str]
 ):
     # load the new file content from the blob client
     new_file_content = client.read().decode('utf-8')
@@ -368,7 +390,8 @@ def func_import_splose_invoices_to_myob(
         inputblobAccessToken,
         inputblobRefreshToken,
         outputblobAccessToken,
-        outputblobRefreshToken
+        outputblobRefreshToken,
+        msgout
     )
     # if company_info_result is a dict and has the 'Build' key, proceed with actual data operations
     if isinstance(company_info_result, dict) and 'Build' in company_info_result:
@@ -425,6 +448,9 @@ def func_import_splose_invoices_to_myob(
 @app.blob_output(arg_name="outputblobpage",
                 path="teamicare/myob-payment-inbound/myob_payment_from.txt",
                 connection="AzureWebJobsStorage")
+@app.queue_output(arg_name="msgout", 
+                  queue_name="myob-auth-notifications", 
+                  connection="AzureWebJobsStorage")
 def func_get_customer_payments_after_date_and_convert_to_invoice_key(
     myTimer: func.TimerRequest,
     inputblobpage: str,
@@ -433,7 +459,8 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
     inputblobRefreshToken: str,
     outputblobpage: func.Out[str],
     outputblobAccessToken: func.Out[str], 
-    outputblobRefreshToken: func.Out[str]
+    outputblobRefreshToken: func.Out[str],
+    msgout: func.Out[str]
 ):
     EARLIEST_MODIFIED_DATE = '2000-01-01T00:00:00Z'
     DELTA_DAYS_FOR_NEXT_RUN = 90
@@ -444,7 +471,8 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
         inputblobAccessToken,
         inputblobRefreshToken,
         outputblobAccessToken,
-        outputblobRefreshToken
+        outputblobRefreshToken,
+        msgout
     )
     # if company_info_result is a dict and has the 'Build' key, proceed with actual data operations
     if isinstance(company_info_result, dict) and 'Build' in company_info_result:

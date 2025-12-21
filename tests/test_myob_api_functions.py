@@ -19,7 +19,8 @@ def test_func_myob_authorize(entry):
     inblobstr = os.environ.get("myob_pytest_refresh_token","")
     outblobstr_0 = MockOut()
     outblobstr_1 = MockOut()
-    _ = entry.func_myob_authorize(inblobstr, outblobstr_0, outblobstr_1)                                                                              
+    queuestr = MockOut()
+    _ = entry.func_myob_authorize(inblobstr, outblobstr_0, outblobstr_1, queuestr)                                                                              
     # Check the output.
     assert(len(outblobstr_0.val) > 0)
     assert(len(outblobstr_1.val) > 0)
@@ -51,8 +52,9 @@ def test_func_myob_get_company_info(entry):
     refresh_token = os.environ.get("myob_pytest_refresh_token","")
     outblobstr_0 = MockOut()
     outblobstr_1 = MockOut()
+    queuestr = MockOut()
     # Call the function.
-    resp = entry.func_myob_get_company_info(access_token, refresh_token, outblobstr_0, outblobstr_1)
+    resp = entry.func_myob_get_company_info(access_token, refresh_token, outblobstr_0, outblobstr_1, queuestr)
     # Check the output.
     assert(
         isinstance(resp, dict)
@@ -68,6 +70,7 @@ def test_func_filter_splose_invoice_for_myob_import(entry):
     inputblobRefreshToken = os.environ.get("myob_pytest_refresh_token","")
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
+    queuestr = MockOut()
     # Call the function.
     resp = func_call(
         myTimer,
@@ -75,7 +78,8 @@ def test_func_filter_splose_invoice_for_myob_import(entry):
         inputblobAccessToken,
         inputblobRefreshToken,
         outputblobAccessToken,
-        outputblobRefreshToken
+        outputblobRefreshToken,
+        queuestr
     )
     # Check if function runs without error
     assert(
@@ -95,6 +99,7 @@ def test_func_convert_splose_invoices_to_myob_customers(entry):
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
     outputblobMyobUpsertedCustomers = MockOut()
+    queuestr = MockOut()
     # Call the function.
     resp = func_call(
         client,
@@ -103,7 +108,8 @@ def test_func_convert_splose_invoices_to_myob_customers(entry):
         inputblobRefreshToken,
         outputblobAccessToken,
         outputblobRefreshToken,
-        outputblobMyobUpsertedCustomers
+        outputblobMyobUpsertedCustomers,
+        queuestr
     )
     # Check the output.
     assert(
@@ -129,6 +135,7 @@ def test_func_import_splose_invoices_to_myob(entry):
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
     outputblobMyobNewInvoices = MockOut()
+    queuestr = MockOut()
     # Call the function.
     resp = func_call(
         client,
@@ -138,7 +145,8 @@ def test_func_import_splose_invoices_to_myob(entry):
         inputblobRefreshToken,
         outputblobAccessToken,
         outputblobRefreshToken,
-        outputblobMyobNewInvoices
+        outputblobMyobNewInvoices,
+        queuestr
     )
     # Check the output.
     assert(
@@ -177,6 +185,7 @@ def test_func_get_customer_payments_after_date_and_convert_to_invoice_key(entry)
     outputblobpage = MockOut()
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
+    queuestr = MockOut()
     # Call the function.
     resp = func_call(
         myTimer,
@@ -186,7 +195,8 @@ def test_func_get_customer_payments_after_date_and_convert_to_invoice_key(entry)
         inputblobRefreshToken,
         outputblobpage,
         outputblobAccessToken,
-        outputblobRefreshToken
+        outputblobRefreshToken,
+        queuestr
     )
     # Check the output.
     assert(

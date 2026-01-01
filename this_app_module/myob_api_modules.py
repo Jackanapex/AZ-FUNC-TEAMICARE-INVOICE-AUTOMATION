@@ -34,7 +34,7 @@ def create_get_access_code_url(url: str, client_id: str, redirect_uri: str, scop
     """
     # url-encode the redirect_uri
     redirect_uri = requests.utils.quote(redirect_uri, safe='')
-    result_url = f"{url}?client_id={client_id}&redirect_uri={redirect_uri}&response_type={response_type}&scope={scope}"
+    result_url = f"{url}?client_id={client_id}&redirect_uri={redirect_uri}&response_type={response_type}&scope={scope}&prompt=consent"
     logging.info(f"Generated access code URL: {result_url}")
     return result_url
 

@@ -216,18 +216,20 @@ def update_invoices_with_payments(invoice_list: list, payment_dict: dict) -> lis
     # iterate through the invoice list and add new keys of 'amount' if there is a matching payment in the payment list
     successful_list = []
     for invoice in invoice_list:
-        if str(invoice['invoiceNumber']) in payment_dict:
+        if (str(invoice['invoiceNumber']) in payment_dict) and (invoice['paidAmount'] < invoice['total']):
             # create a payment record based on the invoice and payment_dict[str(invoice['id'])]
             this_payment_record = {
                 'patientId': invoice['patientId'],
                 'locationId': invoice['locationId'],
                 'paymentMethodId': 38158, # assuming a default payment method ID
-                'amount': payment_dict[str(invoice['invoiceNumber'])]['amount'],
+                'amount': round(payment_dict[str(invoice['invoiceNumber'])]['amount'], 2),
                 'paymentDate': payment_dict[str(invoice['invoiceNumber'])]['paymentDate'],
                 'paymentInvoices': [
                     {
                     'invoiceId': invoice['id'],
-                    'amount': payment_dict[str(invoice['invoiceNumber'])]['amount']
+                    'amount': round(
+                        min(payment_dict[str(invoice['invoiceNumber'])]['amount'], invoice['total'] - invoice['paidAmount'])
+                        , 2)
                     }
                 ]
             }

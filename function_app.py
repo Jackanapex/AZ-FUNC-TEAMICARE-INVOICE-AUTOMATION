@@ -531,7 +531,12 @@ def func_update_splose_invoices_with_payment_gaps(
     assert(
         isinstance(payment_dict, dict)
     )
-    # Now update these invoices with payments of $1 each
+    # Firstly update these invoices with actual payments from MYOB into Splose
+    updated_invoices = splose_api_modules.update_invoices_with_payments(
+        invoice_list = _,
+        payment_dict = payment_dict
+    )
+    # Now update these invoices with payments of the gaps only
     updated_invoices = splose_api_modules.update_invoices_with_payment_gaps(
         invoice_list = _,
         payment_dict = payment_dict

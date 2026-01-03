@@ -427,7 +427,7 @@ def func_import_splose_invoices_to_myob(
     result_json_str = json.dumps(imported_invoices, ensure_ascii=False, indent=4)
     outputblobMyobNewInvoices.set(result_json_str)
 
-@app.function_name(name="func_get_customer_payments_after_date_and_convert_to_invoice_key")
+@app.function_name(name="func_get_customer_payments_after_cr_number_and_convert_to_invoice_key")
 @app.timer_trigger(schedule="0 0 18 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
 @app.blob_input(arg_name="inputblobpage",
                 path="teamicare/myob-payment-inbound/myob_payment_from.txt",
@@ -453,7 +453,7 @@ def func_import_splose_invoices_to_myob(
 @app.queue_output(arg_name="msgout", 
                   queue_name="myob-auth-notifications", 
                   connection="AzureWebJobsStorage")
-def func_get_customer_payments_after_date_and_convert_to_invoice_key(
+def func_get_customer_payments_after_cr_number_and_convert_to_invoice_key(
     myTimer: func.TimerRequest,
     inputblobpage: str,
     inputblobBusinessId: str,
@@ -464,8 +464,7 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
     outputblobRefreshToken: func.Out[str],
     msgout: func.Out[str]
 ):
-    EARLIEST_MODIFIED_DATE = '2000-01-01T00:00:00Z'
-    DELTA_DAYS_FOR_NEXT_RUN = 90
+    EARLIEST_MODIFIED_CR = 0
     if myTimer.past_due:
         logging.info('The timer is past due!')
         # call func_myob_get_company_info first to ensure access token is valid
@@ -484,19 +483,17 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
         return {'error': 'Invalid MYOB access token'}
     # if inputblobpage is None or empty or cannot be parsed to a date time in the format of 'YYYY-MM-DDTHH:MM:SSZ', use EARLIEST_MODIFIED_DATE
     if inputblobpage == '' or inputblobpage is None:
-        blobinput = EARLIEST_MODIFIED_DATE
+        blobinput = 'CR' + str(EARLIEST_MODIFIED_CR).zfill(6)
     else:
         try:
-            blobinput = inputblobpage.strip()
-            dt.strptime(blobinput, '%Y-%m-%dT%H:%M:%SZ')
+            blobinput = 'CR' + str(int(inputblobpage.strip())).zfill(6)
         except ValueError:
-            blobinput = EARLIEST_MODIFIED_DATE
-    # now call the myob_api_modules.get_customer_payments_after_date_and_convert_to_invoice 
-    after_date = dt.strptime(blobinput, '%Y-%m-%dT%H:%M:%SZ')
-    resp = myob_api_modules.get_customer_payments_after_date_and_convert_to_invoice_key(
+            blobinput = 'CR' + str(EARLIEST_MODIFIED_CR).zfill(6)
+    # now call the myob_api_modules.get_customer_payments_after_cr_number_and_convert_to_invoice_key 
+    resp = myob_api_modules.get_customer_payments_after_cr_number_and_convert_to_invoice_key(
         access_token=company_info_result['_auth_info'].get('access_token', ''),
         business_id=inputblobBusinessId,
-        after_date=after_date
+        after_cr_number=blobinput
     )
     assert(isinstance(resp, dict))
     # set the resp dict to save into blob outputblobMyobNewPayments as a pretty formatted json file for loading to another function later
@@ -506,9 +503,96 @@ def func_get_customer_payments_after_date_and_convert_to_invoice_key(
         f"myob-payment-outbound/myob_new_payments_{dt.now().strftime('%Y%m%dT%H%M%S')}.json",
         "teamicare"
     )
-    # update the outputblobpage to the current date time minus 90 days
-    new_after_date = dt.now() - timedelta(days=DELTA_DAYS_FOR_NEXT_RUN)
-    outputblobpage.set(dt.strftime(new_after_date,'%Y-%m-%dT%H:%M:%SZ'))
+    # update the outputblobpage to the maximum CR number from the resp dict
+    # CR numbers are stored in the resp dict under the key 'cr_number' in each value of the k-v pairs
+    cr_number_list = []
+    for k, v in resp.items():
+        cr_number_list.append(int(v.get('cr_number', 'CR000000').replace('CR','')))
+    max_cr_number = max(cr_number_list) if cr_number_list else 0
+    outputblobpage.set(str(max_cr_number))
+
+# @app.function_name(name="func_get_customer_payments_after_date_and_convert_to_invoice_key")
+# @app.timer_trigger(schedule="0 0 18 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
+# @app.blob_input(arg_name="inputblobpage",
+#                 path="teamicare/myob-payment-inbound/myob_payment_from.txt",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobBusinessId",
+#                 path="teamicare/myob-authorize/business_id",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobAccessToken",
+#                 path="teamicare/myob-authorize/access_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_input(arg_name="inputblobRefreshToken",
+#                 path="teamicare/myob-authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobAccessToken",
+#                 path="teamicare/myob-authorize/access_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobRefreshToken",
+#                 path="teamicare/myob-authorize/refresh_token",
+#                 connection="AzureWebJobsStorage")
+# @app.blob_output(arg_name="outputblobpage",
+#                 path="teamicare/myob-payment-inbound/myob_payment_from.txt",
+#                 connection="AzureWebJobsStorage")
+# @app.queue_output(arg_name="msgout", 
+#                   queue_name="myob-auth-notifications", 
+#                   connection="AzureWebJobsStorage")
+# def func_get_customer_payments_after_date_and_convert_to_invoice_key(
+#     myTimer: func.TimerRequest,
+#     inputblobpage: str,
+#     inputblobBusinessId: str,
+#     inputblobAccessToken: str, 
+#     inputblobRefreshToken: str,
+#     outputblobpage: func.Out[str],
+#     outputblobAccessToken: func.Out[str], 
+#     outputblobRefreshToken: func.Out[str],
+#     msgout: func.Out[str]
+# ):
+#     EARLIEST_MODIFIED_DATE = '2000-01-01T00:00:00Z'
+#     DELTA_DAYS_FOR_NEXT_RUN = 90
+#     if myTimer.past_due:
+#         logging.info('The timer is past due!')
+#         # call func_myob_get_company_info first to ensure access token is valid
+#     company_info_result = func_myob_get_company_info(
+#         inputblobAccessToken,
+#         inputblobRefreshToken,
+#         outputblobAccessToken,
+#         outputblobRefreshToken,
+#         msgout
+#     )
+#     # if company_info_result is a dict and has the 'Build' key, proceed with actual data operations
+#     if isinstance(company_info_result, dict) and 'Build' in company_info_result:
+#         logging.info("MYOB Access token is valid, proceeding with data operations...")
+#     else:
+#         logging.error("MYOB Access token is invalid, cannot proceed with data operations.")
+#         return {'error': 'Invalid MYOB access token'}
+#     # if inputblobpage is None or empty or cannot be parsed to a date time in the format of 'YYYY-MM-DDTHH:MM:SSZ', use EARLIEST_MODIFIED_DATE
+#     if inputblobpage == '' or inputblobpage is None:
+#         blobinput = EARLIEST_MODIFIED_DATE
+#     else:
+#         try:
+#             blobinput = inputblobpage.strip()
+#             dt.strptime(blobinput, '%Y-%m-%dT%H:%M:%SZ')
+#         except ValueError:
+#             blobinput = EARLIEST_MODIFIED_DATE
+#     # now call the myob_api_modules.get_customer_payments_after_date_and_convert_to_invoice 
+#     after_date = dt.strptime(blobinput, '%Y-%m-%dT%H:%M:%SZ')
+#     resp = myob_api_modules.get_customer_payments_after_date_and_convert_to_invoice_key(
+#         access_token=company_info_result['_auth_info'].get('access_token', ''),
+#         business_id=inputblobBusinessId,
+#         after_date=after_date
+#     )
+#     assert(isinstance(resp, dict))
+#     # set the resp dict to save into blob outputblobMyobNewPayments as a pretty formatted json file for loading to another function later
+#     result_json_str = json.dumps(resp, ensure_ascii=False, indent=4)
+#     azure_util_modules.save_content_to_blob(
+#         result_json_str,
+#         f"myob-payment-outbound/myob_new_payments_{dt.now().strftime('%Y%m%dT%H%M%S')}.json",
+#         "teamicare"
+#     )
+#     # update the outputblobpage to the current date time minus 90 days
+#     new_after_date = dt.now() - timedelta(days=DELTA_DAYS_FOR_NEXT_RUN)
+#     outputblobpage.set(dt.strftime(new_after_date,'%Y-%m-%dT%H:%M:%SZ'))
 
 @app.function_name(name="func_update_splose_invoices_with_payment_gaps")
 @app.blob_trigger(arg_name="client",

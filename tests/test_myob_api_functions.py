@@ -173,12 +173,42 @@ def test_func_import_splose_invoices_to_myob(entry):
         len(delete_resp) > 0
     )
 
-def test_func_get_customer_payments_after_date_and_convert_to_invoice_key(entry):
+# def test_func_get_customer_payments_after_date_and_convert_to_invoice_key(entry):
+#     """ This example shows how test case works. """
+#     # Construct a mock blob trigger request.
+#     func_call = entry.func_get_customer_payments_after_date_and_convert_to_invoice_key.build().get_user_function()
+#     myTimer = MockTimer()
+#     inputblobpage = '2025-11-01T00:00:00Z'
+#     inputblobBusinessId  = os.environ.get("myob_pytest_business_id","")
+#     inputblobAccessToken = os.environ.get("myob_pytest_access_token","")
+#     inputblobRefreshToken = os.environ.get("myob_pytest_refresh_token","")
+#     outputblobpage = MockOut()
+#     outputblobAccessToken = MockOut()
+#     outputblobRefreshToken = MockOut()
+#     queuestr = MockOut()
+#     # Call the function.
+#     resp = func_call(
+#         myTimer,
+#         inputblobpage,
+#         inputblobBusinessId,
+#         inputblobAccessToken,
+#         inputblobRefreshToken,
+#         outputblobpage,
+#         outputblobAccessToken,
+#         outputblobRefreshToken,
+#         queuestr
+#     )
+#     # Check the output.
+#     assert(
+#         resp is None
+#     )
+
+def test_func_get_customer_payments_after_cr_number_and_convert_to_invoice_key(entry):
     """ This example shows how test case works. """
     # Construct a mock blob trigger request.
-    func_call = entry.func_get_customer_payments_after_date_and_convert_to_invoice_key.build().get_user_function()
+    func_call = entry.func_get_customer_payments_after_cr_number_and_convert_to_invoice_key.build().get_user_function()
     myTimer = MockTimer()
-    inputblobpage = '2025-11-01T00:00:00Z'
+    inputblobpage = '12'
     inputblobBusinessId  = os.environ.get("myob_pytest_business_id","")
     inputblobAccessToken = os.environ.get("myob_pytest_access_token","")
     inputblobRefreshToken = os.environ.get("myob_pytest_refresh_token","")

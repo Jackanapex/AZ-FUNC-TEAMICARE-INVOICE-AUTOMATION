@@ -161,6 +161,45 @@ def recursively_get_customer_payments_after_date(access_token: str, business_id:
     wait=wait_fixed(5),
     retry=retry_if_exception_type(Exception)
 )
+def recursively_get_customer_payments_after_cr_number(access_token: str, business_id: str, after_cr_number: str) -> list:
+    """
+    Recursively get the customer payments after a specific date using the access token.
+    """
+    after_date_str = f"ReceiptNumber gt '{after_cr_number}'"
+    # url-encode after_date_str
+    after_date_str = requests.utils.quote(after_date_str, safe='')
+    url = f"{os.environ.get('myob_api_url','')}/{business_id}/Sale/CustomerPayment?$filter={after_date_str}"
+    logging.info(f"Getting customer payments from URL: {url}")
+    payload = {}
+    headers = compose_request_headers(access_token)
+    response = requests.request("GET", url, headers=headers, data=payload)
+    logging.info(f"Response status code: {response.status_code}")
+    if response.status_code != 200:
+        logging.error(f"Error getting customer payments: {response.text}")
+        response.raise_for_status()
+    logging.info(f"Response text: {response.text}")
+    payments = response.json()
+    all_payments = payments.get("Items", [])
+    # check if there is a next link
+    next_link = payments.get("NextPageLink")
+    while next_link:
+        logging.info(f"Getting next page of customer payments from URL: {next_link}")
+        response = requests.request("GET", next_link, headers=headers, data=payload)
+        logging.info(f"Response status code: {response.status_code}")
+        if response.status_code != 200:
+            logging.error(f"Error getting customer payments: {response.text}")
+            response.raise_for_status()
+        logging.info(f"Response text: {response.text}")
+        payments = response.json()
+        all_payments.extend(payments.get("Items", []))
+        next_link = payments.get("NextPageLink")
+    return all_payments
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    retry=retry_if_exception_type(Exception)
+)
 def recursively_get_all_item_invoices(access_token: str, business_id: str) -> list:
     """
     Recursively get all item invoices using the access token.
@@ -210,6 +249,29 @@ def get_customer_payments_after_date_and_convert_to_invoice_key(access_token: st
                 if invoice_number not in invoice_payment_dict:
                     invoice_payment_dict[str(invoice_number)] = {'amount': invoice.get('AmountApplied', 0.0), 'paymentDate': payment.get('Date', time.strftime("%Y-%m-%dT%H:%M:%S"))[:10]}
                 else:
+                    invoice_payment_dict[str(invoice_number)]['amount'] += invoice.get('AmountApplied', 0.0)
+                    invoice_payment_dict[str(invoice_number)]['paymentDate'] = max(invoice_payment_dict[str(invoice_number)]['paymentDate'], payment.get('Date', time.strftime("%Y-%m-%dT%H:%M:%S"))[:10])
+    return invoice_payment_dict
+
+def get_customer_payments_after_cr_number_and_convert_to_invoice_key(access_token: str, business_id: str, after_cr_number: str) -> dict:
+    """
+    Get the customer payments after a specific date using the access token.
+    """
+    after_date_str = f"ReceiptNumber gt '{after_cr_number}'"
+    # url-encode after_date_str
+    after_date_str = requests.utils.quote(after_date_str, safe='')
+    payments = recursively_get_customer_payments_after_cr_number(access_token, business_id, after_cr_number)
+    # iterate through each item in payments['Items'] and extract the invoices under the Invoices key
+    invoice_payment_dict = {}
+    for payment in payments:
+        invoice_list = payment.get("Invoices", [])
+        for invoice in invoice_list:
+            invoice_number = invoice.get("Number")
+            if invoice_number is not None:
+                if invoice_number not in invoice_payment_dict:
+                    invoice_payment_dict[str(invoice_number)] = {'cr_number': payment.get("ReceiptNumber", "CR000000"), 'amount': invoice.get('AmountApplied', 0.0), 'paymentDate': payment.get('Date', time.strftime("%Y-%m-%dT%H:%M:%S"))[:10]}
+                else:
+                    invoice_payment_dict[str(invoice_number)]['cr_number'] = max(invoice_payment_dict[str(invoice_number)]['cr_number'], payment.get("ReceiptNumber", "CR000000"))
                     invoice_payment_dict[str(invoice_number)]['amount'] += invoice.get('AmountApplied', 0.0)
                     invoice_payment_dict[str(invoice_number)]['paymentDate'] = max(invoice_payment_dict[str(invoice_number)]['paymentDate'], payment.get('Date', time.strftime("%Y-%m-%dT%H:%M:%S"))[:10])
     return invoice_payment_dict

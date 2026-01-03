@@ -508,8 +508,9 @@ def func_get_customer_payments_after_cr_number_and_convert_to_invoice_key(
     cr_number_list = []
     for k, v in resp.items():
         cr_number_list.append(int(v.get('cr_number', 'CR000000').replace('CR','')))
-    max_cr_number = max(cr_number_list) if cr_number_list else 0
-    outputblobpage.set(str(max_cr_number))
+    if len(cr_number_list) > 0:
+        max_cr_number = max(cr_number_list) if cr_number_list else 0
+        outputblobpage.set(str(max_cr_number))
 
 # @app.function_name(name="func_get_customer_payments_after_date_and_convert_to_invoice_key")
 # @app.timer_trigger(schedule="0 0 18 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])

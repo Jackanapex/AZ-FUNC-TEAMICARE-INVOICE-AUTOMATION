@@ -211,6 +211,9 @@ def func_myob_data_operation_example(
 @app.queue_output(arg_name="msgout", 
                   queue_name="myob-auth-notifications", 
                   connection="AzureWebJobsStorage")
+@app.blob_output(arg_name="outputblobNDIAInvoices",
+                 path="teamicare/ndia-inbound/splose_invoice_to_ndia_{DateTime}.csv",
+                 connection="AzureWebJobsStorage")
 def func_filter_splose_invoice_for_myob_import(
     myTimer: func.TimerRequest,
     inputblobBusinessId: str,
@@ -218,7 +221,8 @@ def func_filter_splose_invoice_for_myob_import(
     inputblobRefreshToken: str, 
     outputblobAccessToken: func.Out[str], 
     outputblobRefreshToken: func.Out[str],
-    msgout: func.Out[str]
+    msgout: func.Out[str],
+    outputblobNDIAInvoices: func.Out[str]
 ):
     if myTimer.past_due:
         logging.info('The timer is past due!')
@@ -266,6 +270,11 @@ def func_filter_splose_invoice_for_myob_import(
         f"splose-outbound/splose_invoices_to_myob_import_{dt.now().strftime('%Y%m%dT%H%M%S')}.json", 
         "teamicare"
     )
+    # Also create NDIA invoice CSV for the NDIS team
+    ndia_invoice_list = splose_api_modules.filter_for_ndia_managed_invoices(pending_invoices)
+    ndia_invoice_csv = splose_api_modules.create_ndia_invoice_list_csv(ndia_invoice_list)
+    outputblobNDIAInvoices.set(ndia_invoice_csv)
+    
 
 @app.function_name(name="func_convert_splose_invoices_to_myob_customers")
 @app.blob_trigger(arg_name="client",

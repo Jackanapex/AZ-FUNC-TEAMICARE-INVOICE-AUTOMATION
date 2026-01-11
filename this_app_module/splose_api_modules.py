@@ -8,7 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_t
 
 @retry(
     stop=stop_after_attempt(3),
-    wait=wait_fixed(5),
+    wait=wait_fixed(10),
     retry=retry_if_exception_type(Exception)
 )
 def list_objects_from_splose(base_url: str, this_url: str, secret: str, accumulated_object_list = [], params = None) -> requests.Response:
@@ -38,7 +38,7 @@ def list_objects_from_splose(base_url: str, this_url: str, secret: str, accumula
 
 @retry(
     stop=stop_after_attempt(3),
-    wait=wait_fixed(5),
+    wait=wait_fixed(10),
     retry=retry_if_exception_type(Exception)
 )
 def get_one_object_from_splose(base_url: str, this_url: str, secret: str, object_id: int) -> requests.Response:
@@ -54,7 +54,7 @@ def get_one_object_from_splose(base_url: str, this_url: str, secret: str, object
 
 @retry(
     stop=stop_after_attempt(3),
-    wait=wait_fixed(5),
+    wait=wait_fixed(10),
     retry=retry_if_exception_type(Exception)
 )
 def create_one_object_in_splose(base_url: str, this_url: str, secret: str, object_data: dict) -> requests.Response:
@@ -119,7 +119,7 @@ def get_all_awaiting_payment_invoices(patient_to_contact_mapping: dict) -> list:
     # convert result_invoice_list to a flat dataframe
     df_invoices = pd.json_normalize(result_invoice_list)
     df_contacts = pd.json_normalize(result_contact_list)
-    df_patients = pd.json_normalize(result_patient_list)
+    df_patients = pd.json_normalize(result_patient_list, max_level=0)
     df_practitioners = pd.json_normalize(result_practitioner_list)
     if len(df_invoices) > 0:
         df_merged = df_invoices.merge(df_contacts[['id', 'name', 'companyName', 'email', 'phoneNumbers', 'addressL1', 'addressL2', 'addressL3', 'suburb', 'state', 'postalCode', 'country']].add_prefix('contact_'), how='left', left_on='contactId', right_on='contact_id')
@@ -198,6 +198,170 @@ def get_all_awaiting_payment_invoices(patient_to_contact_mapping: dict) -> list:
     else:
         logging.info("No invoices with Awaiting Payment status found.")
     return result_list
+
+def filter_for_ndia_managed_invoices(invoice_list: list) -> list:
+    """
+    Filter function to get only invoices with NDIS management.
+    """
+    filtered_invoices = [invoice for invoice in invoice_list if ((invoice.get('patient_ndisInfo', {}) or {}).get('fundManagement', '') or '').upper() == 'NDIA-MANAGED']
+    return filtered_invoices
+
+def convert_invoice_list_to_ndia_required_format(invoice_list: list, appointment_list: list, service_list: list, support_item_list: list) -> list:
+    result_ndia_invoice_list = []
+    for invoice in invoice_list:
+        for item in invoice.get('invoiceItems', []) or []:
+            # firstly get the corresponding appointment or support item information
+            this_support_item = None
+            this_appointment = None
+            if (item.get('type', '') or '') == 'appointment':
+                this_appointment = next((a for a in appointment_list if a.get('id', -1) == item.get('typeId', -2)), None)
+            elif (item.get('type', '') or '') == 'supportItem':
+                this_support_item = next((s for s in support_item_list if s.get('id', -1) == item.get('typeId', -2)), None)
+                this_appointment = next((a for a in appointment_list if a.get('id', -1) == this_support_item.get('appointmentId', -2)), None)
+            # now based on the support item or appointment, calculate the Quantity, Hours, ClaimType and CancellationReason
+            # then check this_appointment status in its appointmentPatients field matching element with patientId
+            this_appointment_patient_status = next(
+                (
+                    (ap.get('status', 'Completed') or 'Completed') for ap in (this_appointment.get('appointmentPatients', []) or []) 
+                    if ap.get('patientId', -1) == invoice.get('patientId', -2)
+                ), 
+                'Completed'
+            ) if this_appointment else 'Completed'
+            # then get the service type by differentiating between appointment and support item
+            # if this_support_item is not None, then get the value under 'type' key in this_support_item
+            this_service_type = 'NA'
+            service_name = ''
+            if this_support_item:
+                service_name = this_support_item.get('type', '') or ''
+            elif this_appointment: # elif it's an appointment item, get the serviceId from appointment and then find the service type from service_list
+                service_obj = next((s for s in service_list if s.get('id', -1) == this_appointment.get('serviceId', -2)), None)
+                if service_obj:
+                    service_name = str(service_obj.get('id', -1) or -1)
+            # Now define an arbitary dictionary between service name and NDIA service type code
+            # TO-DO recommend to Xin to use a tag in the service to reflect NDIA service type directly, so this thing won't need to be
+            # defined in code
+            SERVICE_TO_NDIA_TYPE_MAPPING = {
+                '233064': 'EMPTY',
+                '362029': 'EMPTY',
+                '370324': 'REPW',
+                '362028': 'REPW',
+                '370323': 'EMPTY',
+                '361982': 'EMPTY',
+                '361984': 'NF2F',
+                '362409': 'NF2F',
+                '370325': 'NF2F',
+                '362410': 'REPW',
+                '208284': 'REPW',
+                '123663': 'REPW',
+                '208278': 'EMPTY',
+                '122949': 'EMPTY',
+                '123661': 'NF2F',
+                '208285': 'NF2F',
+                '233065': 'NF2F',
+                '233066': 'REPW',
+                'Provider Travel': 'TRAN'
+            }
+            this_service_type = SERVICE_TO_NDIA_TYPE_MAPPING.get(service_name[:15], 'NA') or 'NA'
+            this_service_type = '' if this_service_type == 'EMPTY' else this_service_type
+            # now check if this_appointment_patient_status is Did not arrive or Cancelled, if either value, change this_service_type to CANC
+            if this_appointment_patient_status == 'Did not arrive':
+                this_service_type = 'CANC'
+                this_cancellation_reason = 'NSDH'
+            elif this_appointment_patient_status == 'Cancelled':
+                this_service_type = 'CANC'
+                this_cancellation_reason = 'NSDO'
+            # now determine if the unit and unit price for the appointment/support item is quantity-based or hour-based
+            this_unit = {
+                'quantity_based': {'quantity': None, 'unit_price': None},
+                'hour_based': {'quantity': None, 'unit_price': None}
+            }
+            if this_support_item:
+                if (this_support_item.get('unit', '') or '').upper() == 'KM':
+                    this_unit['quantity_based']['quantity'] = item.get('quantity', 1) or 1
+                    this_unit['quantity_based']['unit_price'] = item.get('unitPrice', 0.0) or 0.0
+                else:
+                    this_unit['hour_based']['quantity'] = item.get('quantity', 1) or 1
+                    this_unit['hour_based']['unit_price'] = item.get('unitPrice', 0.0) or 0.0
+            elif this_appointment:
+                if (this_appointment.get('unit', '') or '').upper() == 'HOUR':
+                    this_unit['hour_based']['quantity'] = item.get('quantity', 1) or 1
+                    this_unit['hour_based']['unit_price'] = item.get('unitPrice', 0.0) or 0.0
+                else:
+                    this_unit['quantity_based']['quantity'] = item.get('quantity', 1) or 1
+                    this_unit['quantity_based']['unit_price'] = item.get('unitPrice', 0.0) or 0.0
+            # now convert this_unit['hour_based']['quantity'] from number of hours to the format of HH:MM
+            if this_unit['hour_based']['quantity'] is not None:
+                total_hours = this_unit['hour_based']['quantity']
+                hours_part = int(total_hours)
+                minutes_part = int(round((total_hours - hours_part) * 60))
+                this_unit['hour_based']['quantity'] = f"{hours_part:02d}:{minutes_part:02d}"
+            # finally, compose the ndia_invoice_record
+            ndia_invoice_record = {}
+            ndia_invoice_record['RegistrationNumber'] = os.environ.get('ndia_registration_number', '')
+            ndia_invoice_record['NDISNumber'] = invoice.get('patient_ndisNumber', '') or ''
+            ndia_invoice_record['SupportsDeliveredFrom'] = (this_appointment.get('start', '') or '')[:10] if this_appointment else ''
+            ndia_invoice_record['SupportsDeliveredTo'] = (this_appointment.get('end', '') or '')[:10] if this_appointment else ''
+            ndia_invoice_record['SupportNumber'] = item.get('code', '') or ''
+            ndia_invoice_record['ClaimReference'] = f"{invoice.get('invoiceNumber', 'NA') or 'NA'}_{item.get('id', 'NA') or 'NA'}"
+            ndia_invoice_record['Quantity'] = this_unit['quantity_based']['quantity']
+            ndia_invoice_record['Hours'] = this_unit['hour_based']['quantity']
+            ndia_invoice_record['UnitPrice'] = item.get('unitPrice', 0.0) or 0.0
+            ndia_invoice_record['GSTCode'] = 'P2'
+            ndia_invoice_record['AuthorisedBy'] = None
+            ndia_invoice_record['ParticipantApproved'] = None
+            ndia_invoice_record['InKindFundingProgram'] = None
+            ndia_invoice_record['ClaimType'] = this_service_type
+            ndia_invoice_record['CancellationReason'] = this_cancellation_reason if this_service_type == 'CANC' else None
+            ndia_invoice_record['ABN of Support Provider'] = os.environ.get('ndia_abn', '')
+            result_ndia_invoice_list.append(ndia_invoice_record)
+    return result_ndia_invoice_list
+
+def list_all_appointment() -> list:
+    resp = list_objects_from_splose(
+        base_url = os.environ['splose_api_url'],
+        this_url = os.environ['splose_api_url_list_appointments'],
+        secret = os.environ['splose_api_secret']
+    )
+    assert(isinstance(resp, list))
+    logging.info(f"Number of appointments retrieved: {len(resp)}")
+    return resp
+
+def list_all_service_with_code() -> list:
+    resp = list_objects_from_splose(
+        base_url = os.environ['splose_api_url'],
+        this_url = os.environ['splose_api_url_list_services'],
+        secret = os.environ['splose_api_secret']
+    )
+    assert(isinstance(resp, list))
+    # services_with_code = [service for service in resp if (service.get('code', '') or '').strip() != '']
+    logging.info(f"Number of services with code retrieved: {len(resp)}")
+    return resp
+
+def list_all_support_items_with_code() -> list:
+    resp = list_objects_from_splose(
+        base_url = os.environ['splose_api_url'],
+        this_url = os.environ['splose_api_url_list_support_items'],
+        secret = os.environ['splose_api_secret']
+    )
+    assert(isinstance(resp, list))
+    # support_items_with_code = [support_item for support_item in resp if (support_item.get('itemCode', '') or '').strip() != '']
+    logging.info(f"Number of support items with code retrieved: {len(resp)}")
+    return resp
+
+def create_ndia_invoice_list_csv(invoice_list: list) -> str:
+    # get all appointments
+    appointment_list = list_all_appointment()
+    # get all services with code
+    service_list = list_all_service_with_code()
+    # get all support items with code
+    support_item_list = list_all_support_items_with_code()
+    # convert invoice list to ndia required format
+    ndia_invoice_list = convert_invoice_list_to_ndia_required_format(invoice_list, appointment_list, service_list, support_item_list)
+    logging.info(f"Number of NDIA invoice records created: {len(ndia_invoice_list)}")
+    # now convert the ndia_invoice_list to a csv string
+    df_ndia_invoices = pd.DataFrame(ndia_invoice_list)
+    csv_string = df_ndia_invoices.to_csv(index=False)
+    return csv_string
 
 def filter_for_invoices(invoice_list: list, invoice_filter_id_list: list) -> list:
     """

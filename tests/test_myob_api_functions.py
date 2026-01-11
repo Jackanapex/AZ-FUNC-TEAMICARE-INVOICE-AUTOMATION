@@ -71,6 +71,7 @@ def test_func_filter_splose_invoice_for_myob_import(entry):
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
     queuestr = MockOut()
+    outputblobNDIAInvoices = MockOut()
     # Call the function.
     resp = func_call(
         myTimer,
@@ -79,7 +80,8 @@ def test_func_filter_splose_invoice_for_myob_import(entry):
         inputblobRefreshToken,
         outputblobAccessToken,
         outputblobRefreshToken,
-        queuestr
+        queuestr,
+        outputblobNDIAInvoices
     )
     # Check if function runs without error
     assert(
@@ -417,6 +419,12 @@ def test_filter_splose_invoice_for_myob_import(entry):
     filename = f"tests/data/__pytest_to_load_splose_pending_invoices_to_import_{now.strftime('%Y%m%d_%H%M%S')}.json"
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(pending_invoices, f, ensure_ascii=False, indent=4)
+    # Also create NDIA invoice CSV for the NDIS team
+    ndia_invoice_list = entry.splose_api_modules.filter_for_ndia_managed_invoices(pending_invoices)
+    ndia_invoice_csv = entry.splose_api_modules.create_ndia_invoice_list_csv(ndia_invoice_list)
+    filename = f"tests/data/__expected_splose_ndia_invoices_{now.strftime('%Y%m%d_%H%M%S')}.csv"
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(ndia_invoice_csv)
 
 def test_convert_splose_invoices_to_myob_customers(entry):
     # load the pending invoices from a pretty formatted json file
@@ -491,17 +499,17 @@ def test_import_splose_invoices_to_myob(entry):
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(imported_invoices, f, ensure_ascii=False, indent=4)
 
-def test_get_customer_payments_after_date_and_convert_to_invoice_key(entry):
-    after_date = datetime.datetime.now() - datetime.timedelta(days=20)
-    resp = entry.myob_api_modules.get_customer_payments_after_date_and_convert_to_invoice_key(
+def test_get_customer_payments_after_cr_number_and_convert_to_invoice_key(entry):
+    after_cr_number = '12'
+    resp = entry.myob_api_modules.get_customer_payments_after_cr_number_and_convert_to_invoice_key(
         access_token=os.environ.get('myob_pytest_access_token',''),
         business_id=os.environ.get('myob_pytest_business_id',''),
-        after_date=after_date
+        after_cr_number=after_cr_number
     )
     assert(isinstance(resp, dict))
     assert(len(resp) >= 0)
     # save the result to a pretty formatted json file for loading to another test later
     now = datetime.datetime.now()
-    filename = f"tests/data/__pytest_to_load_myob_payments_after_{after_date.strftime('%Y%m%d')}_{now.strftime('%Y%m%d_%H%M%S')}.json"
+    filename = f"tests/data/__pytest_to_load_myob_payments_after_{after_cr_number}_{now.strftime('%Y%m%d_%H%M%S')}.json"
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(resp, f, ensure_ascii=False, indent=4)

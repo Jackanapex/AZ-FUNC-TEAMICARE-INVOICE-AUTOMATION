@@ -4,6 +4,52 @@ import datetime
 import json
 from test_utils import _save_json_result_to_local_csv_file
 
+def test_list_cancelled_appointments_from_splose(entry):
+    resp = entry.splose_api_modules.list_objects_from_splose(
+        base_url = os.environ['splose_api_url'],
+        this_url = os.environ['splose_api_url_list_appointments'],
+        secret = os.environ['splose_api_secret'],
+        params = {'status': 'Cancelled'}
+    )
+    assert(isinstance(resp, list))
+    _ = _save_json_result_to_local_csv_file(
+        result=resp, 
+        filename=f"tests/data/__expected_splose_list_appointments_cancelled_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
+
+def test_list_did_not_arrive_appointments_from_splose(entry):
+    resp = entry.splose_api_modules.list_objects_from_splose(
+        base_url = os.environ['splose_api_url'],
+        this_url = os.environ['splose_api_url_list_appointments'],
+        secret = os.environ['splose_api_secret'],
+        params = {'status': 'Did not arrive'}
+    )
+    assert(isinstance(resp, list))
+    _ = _save_json_result_to_local_csv_file(
+        result=resp, 
+        filename=f"tests/data/__expected_splose_list_appointments_did_not_arrive_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
+
+def test_list_all_service_with_code(entry):
+    resp = entry.splose_api_modules.list_all_service_with_code()
+    assert(isinstance(resp, list))
+    _ = _save_json_result_to_local_csv_file(
+        result=resp,
+        filename=f"tests/data/__expected_splose_list_all_services_with_code_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
+
+def test_list_all_support_items_with_code(entry):
+    resp = entry.splose_api_modules.list_all_support_items_with_code()
+    assert(isinstance(resp, list))
+    _ = _save_json_result_to_local_csv_file(
+        result=resp,
+        filename=f"tests/data/__expected_splose_list_all_support_items_with_code_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
+
 def test_list_invoices_from_splose(entry):
     resp = entry.splose_api_modules.list_objects_from_splose(
         base_url = os.environ['splose_api_url'],
@@ -12,6 +58,11 @@ def test_list_invoices_from_splose(entry):
         params = {'status': 'Awaiting Payment'}
     )
     assert(isinstance(resp, list))
+    _ = _save_json_result_to_local_csv_file(
+        result=resp,
+        filename=f"tests/data/__expected_splose_list_awaiting_payment_invoices_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
 
 def test_list_contacts_from_splose(entry):
     resp = entry.splose_api_modules.list_objects_from_splose(
@@ -23,6 +74,7 @@ def test_list_contacts_from_splose(entry):
     assert(isinstance(resp, list))
     assert(len(resp) > 0)
 
+
 def test_list_patients_from_splose(entry):
     resp = entry.splose_api_modules.list_objects_from_splose(
         base_url = os.environ['splose_api_url'],
@@ -32,6 +84,11 @@ def test_list_patients_from_splose(entry):
     )
     assert(isinstance(resp, list))
     assert(len(resp) > 0)
+    _ = _save_json_result_to_local_csv_file(
+        result=resp,
+        filename=f"tests/data/__expected_splose_list_patients_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
 
 def test_list_practitioners_from_splose(entry):
     resp = entry.splose_api_modules.list_objects_from_splose(
@@ -69,6 +126,25 @@ def test_get_all_awaiting_payment_invoices(entry):
     now = datetime.datetime.now()
     filename = f"tests/data/__expected_splose_all_awaiting_payment_invoices_{now.strftime('%Y%m%d_%H%M%S')}"
     _save_json_result_to_local_csv_file(result=_, filename=filename, sample_rows=99999)
+
+
+def test_list_and_filter_ndia_managed_invoices_from_splose(entry):
+    patient_to_contact_mapping = entry.splose_api_modules.get_patient_to_contact_mapping()
+    _ = entry.splose_api_modules.get_all_awaiting_payment_invoices(patient_to_contact_mapping)
+    # Check the output - it should be a list
+    assert(isinstance(_, list))
+    _save_json_result_to_local_csv_file(
+        result=_,
+        filename=f"tests/data/__expected_splose_list_awaiting_payment_invoices_before_filtering_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
+    filtered_resp = entry.splose_api_modules.filter_for_ndia_managed_invoices(_)
+    assert(isinstance(filtered_resp, list))
+    _ = _save_json_result_to_local_csv_file(
+        result=filtered_resp,
+        filename=f"tests/data/__expected_splose_list_ndia_managed_invoices_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        sample_rows=99999
+    )
 
 def test_get_patient_to_contact_mapping(entry):
     _ = entry.splose_api_modules.get_patient_to_contact_mapping()
@@ -132,7 +208,11 @@ def test_update_invoices_with_payment_gaps(entry):
     assert(
         isinstance(testing_payment_dict, dict)
     )
-    
+    # Firstly update these invoices with actual payments from MYOB into Splose
+    updated_invoices = entry.splose_api_modules.update_invoices_with_payments(
+        invoice_list = _,
+        payment_dict = testing_payment_dict
+    )
     # Now update these invoices with payments of $1 each
     updated_invoices = entry.splose_api_modules.update_invoices_with_payment_gaps(
         invoice_list = _,

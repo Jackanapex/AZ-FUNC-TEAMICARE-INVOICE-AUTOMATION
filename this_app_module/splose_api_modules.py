@@ -7,8 +7,8 @@ import numpy as np
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
 @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(10),
+    stop=stop_after_attempt(5),
+    wait=wait_fixed(20),
     retry=retry_if_exception_type(Exception)
 )
 def list_objects_from_splose(base_url: str, this_url: str, secret: str, accumulated_object_list = [], params = None) -> requests.Response:

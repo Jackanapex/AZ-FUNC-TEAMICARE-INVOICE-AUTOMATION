@@ -3,6 +3,7 @@ import logging
 import azure.functions as func
 import os
 import json
+import time
 from datetime import datetime as dt
 from datetime import timedelta
 
@@ -263,17 +264,21 @@ def func_filter_splose_invoice_for_myob_import(
         invoice_list = _,
         invoice_filter_id_list = invoice_id_to_import_list
     )
-    # set the pending invoices to save into blob outputblobSploseInvoices as a pretty formatted json file for loading to another function later
+    # Also create NDIA invoice CSV for the NDIS team
+    ndia_invoice_list = splose_api_modules.filter_for_ndia_managed_invoices(pending_invoices)
+    if len(ndia_invoice_list) == 0:
+        logging.info("No NDIA managed invoices found in the pending invoices.")
+    else:
+        ndia_invoice_csv = splose_api_modules.create_ndia_invoice_list_csv(ndia_invoice_list)
+        outputblobNDIAInvoices.set(ndia_invoice_csv)
+    # If above succeeds, set the pending invoices to save into blob outputblobSploseInvoices as a pretty formatted json file for loading to another function later
+    # This is to ensure this step is idempotent even when API call fails
     result_json_str = json.dumps(pending_invoices, ensure_ascii=False, indent=4)
     azure_util_modules.save_content_to_blob(
         result_json_str, 
         f"splose-outbound/splose_invoices_to_myob_import_{dt.now().strftime('%Y%m%dT%H%M%S')}.json", 
         "teamicare"
     )
-    # Also create NDIA invoice CSV for the NDIS team
-    ndia_invoice_list = splose_api_modules.filter_for_ndia_managed_invoices(pending_invoices)
-    ndia_invoice_csv = splose_api_modules.create_ndia_invoice_list_csv(ndia_invoice_list)
-    outputblobNDIAInvoices.set(ndia_invoice_csv)
     
 
 @app.function_name(name="func_convert_splose_invoices_to_myob_customers")
@@ -295,9 +300,6 @@ def func_filter_splose_invoice_for_myob_import(
                 connection="AzureWebJobsStorage")
 @app.blob_output(arg_name="outputblobRefreshToken",
                 path="teamicare/myob-authorize/refresh_token",
-                connection="AzureWebJobsStorage")
-@app.blob_output(arg_name="outputblobMyobUpsertedCustomers",
-                path="teamicare/myob-customer-outbound/myob_upserted_customers.json",
                 connection="AzureWebJobsStorage")
 @app.queue_output(arg_name="msgout", 
                   queue_name="myob-auth-notifications", 
@@ -345,7 +347,13 @@ def func_convert_splose_invoices_to_myob_customers(
     )
     # set the result dict to save into blob outputblobMyobUpsertedCustomers as a pretty formatted json file for loading to another function later
     result_json_str = json.dumps(result_dict, ensure_ascii=False, indent=4)
-    outputblobMyobUpsertedCustomers.set(result_json_str)
+    azure_util_modules.save_content_to_blob(
+        result_json_str,
+        f"myob-customer-outbound/myob_upserted_customers.json",
+        "teamicare"
+    )
+    time.sleep(20)
+    # outputblobMyobUpsertedCustomers.set(result_json_str)
     # set new_file_content to outputblobMyobNewInvoices for the next function to use
     azure_util_modules.save_content_to_blob(
         new_file_content,

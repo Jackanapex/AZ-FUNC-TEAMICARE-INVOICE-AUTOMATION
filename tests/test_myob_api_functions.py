@@ -100,7 +100,6 @@ def test_func_convert_splose_invoices_to_myob_customers(entry):
     inputblobRefreshToken = os.environ.get("myob_pytest_refresh_token","")
     outputblobAccessToken = MockOut()
     outputblobRefreshToken = MockOut()
-    outputblobMyobUpsertedCustomers = MockOut()
     queuestr = MockOut()
     # Call the function.
     resp = func_call(
@@ -110,13 +109,9 @@ def test_func_convert_splose_invoices_to_myob_customers(entry):
         inputblobRefreshToken,
         outputblobAccessToken,
         outputblobRefreshToken,
-        outputblobMyobUpsertedCustomers,
         queuestr
     )
     # Check the output.
-    assert(
-        isinstance(json.loads(outputblobMyobUpsertedCustomers.val), dict)
-    )
     assert(
         resp is None
     )

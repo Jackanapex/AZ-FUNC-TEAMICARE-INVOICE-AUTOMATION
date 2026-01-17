@@ -3,7 +3,7 @@ import logging
 import azure.functions as func
 import os
 import json
-import time
+# import time
 from datetime import datetime as dt
 from datetime import timedelta
 
@@ -352,7 +352,7 @@ def func_convert_splose_invoices_to_myob_customers(
         f"myob-customer-outbound/myob_upserted_customers.json",
         "teamicare"
     )
-    time.sleep(20)
+    # time.sleep(20)
     # outputblobMyobUpsertedCustomers.set(result_json_str)
     # set new_file_content to outputblobMyobNewInvoices for the next function to use
     azure_util_modules.save_content_to_blob(

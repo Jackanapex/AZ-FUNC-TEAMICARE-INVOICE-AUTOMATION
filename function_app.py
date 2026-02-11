@@ -193,7 +193,7 @@ def func_myob_data_operation_example(
         return {'error': 'Invalid access token'}
 
 @app.function_name(name="func_filter_splose_invoice_for_myob_imports")
-@app.timer_trigger(schedule="0 0 19 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
+@app.timer_trigger(schedule="0 0 3,19 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
 @app.blob_input(arg_name="inputblobBusinessId",
                 path="teamicare/myob-authorize/business_id",
                 connection="AzureWebJobsStorage")
@@ -444,7 +444,7 @@ def func_import_splose_invoices_to_myob(
     outputblobMyobNewInvoices.set(result_json_str)
 
 @app.function_name(name="func_get_customer_payments_after_cr_number_and_convert_to_invoice_key")
-@app.timer_trigger(schedule="0 0 18 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
+@app.timer_trigger(schedule="0 0 2,18 * * *", arg_name="myTimer", run_on_startup=os.environ['is_local_dev'])
 @app.blob_input(arg_name="inputblobpage",
                 path="teamicare/myob-payment-inbound/myob_payment_from.txt",
                 connection="AzureWebJobsStorage")
